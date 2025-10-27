@@ -53,7 +53,7 @@ export default function GameViewer() {
               r.type === "treasure" ? "#eab308" :
               r.type === "trap" ? "#a855f7" :
               r.type === "puzzle" ? "#06b6d4" :
-              "#3f3f46";
+              "#1414bdff";
             ctx.fillStyle = color;
             ctx.fillRect(x * TILE, y * TILE, TILE - 2, TILE - 2);
           }

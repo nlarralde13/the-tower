@@ -16,3 +16,4 @@ export function useGameLoop(enabled: boolean, step: (dt: number) => void) {
     return () => cancelAnimationFrame(id);
   }, [enabled, step]);
 }
+

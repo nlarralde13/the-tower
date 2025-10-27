@@ -20,7 +20,7 @@ export default function SceneViewport() {
       const grad = ctx.createLinearGradient(0, 0, width, height);
       switch (room.type) {
         case "void": grad.addColorStop(0, "#000"); grad.addColorStop(1, "#000"); break;
-        case "empty": grad.addColorStop(0, "#0f172a"); grad.addColorStop(1, "#1f2937"); break;
+        case "empty": grad.addColorStop(0, "#1414bdff"); grad.addColorStop(1, "#1414bdff"); break;
         case "combat": grad.addColorStop(0, "#3b0a0a"); grad.addColorStop(1, "#7f1d1d"); break;
         case "treasure": grad.addColorStop(0, "#3b2f0a"); grad.addColorStop(1, "#a16207"); break;
         case "trap": grad.addColorStop(0, "#2e1065"); grad.addColorStop(1, "#6d28d9"); break;

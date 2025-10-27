@@ -1,0 +1,25 @@
+/* Vertical-first layout for /play */
+
+.tower-vertical {
+  display: flex;
+  flex-direction: column;
+  align-items: center; /* center every child horizontally */
+  gap: 1.25rem;        /* ~20px vertical rhythm */
+}
+
+/* All cards use the same narrow max width for a mobile-like feel on desktop */
+.tower-card {
+  width: min(94vw, 600px); /* fills on phones, ~600px on laptop */
+}
+
+/* The fixed grid is 256x256 — this just centers it inside its card */
+.tower-grid {
+  width: 256px;
+  height: 256px;
+  margin-inline: auto;
+}
+
+/* Console gets the same width and a consistent height for 5 lines */
+.tower-console {
+  width: min(94vw, 600px);
+}
