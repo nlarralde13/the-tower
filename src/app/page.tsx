@@ -1,13 +1,14 @@
 // src/app/page.tsx
-import TopBar from "@/components/TopBar";
 import AuthGate from "@/components/AuthGate";
 import MainMenu from "@/components/MainMenu";
+import PageSurface from "@/components/PageSurface";
 
 export default function Home() {
   return (
-    <AuthGate>
-      <TopBar />
-      <MainMenu />
-    </AuthGate>
+    <PageSurface backgroundImage="/backgrounds/tower-bg.png">
+      <AuthGate>
+        <MainMenu />
+      </AuthGate>
+    </PageSurface>
   );
 }
