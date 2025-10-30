@@ -1,6 +1,7 @@
 import "../app/globals.css";
 import Providers from "@/components/Providers";
 import CrtOverlay from "@/components/CrtOverlay";
+import TopBar from "@/components/TopBar";
 
 export const metadata = {
   title: "The Tower — Pocket Run Edition",
@@ -12,7 +13,10 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
     <html lang="en" className="crt">
       <body>
         <Providers>
-          {children}
+          <div className="app-shell">
+            <TopBar />
+            <div className="app-main">{children}</div>
+          </div>
           <CrtOverlay />
         </Providers>
       </body>

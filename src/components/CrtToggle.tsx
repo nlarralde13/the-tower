@@ -19,8 +19,9 @@ export default function CrtToggle() {
   }
 
   return (
-    <button className="link" onClick={toggle} title="Toggle CRT">
+    <button className="topbar__button" onClick={toggle} title="Toggle CRT mode">
       {on ? "CRT: On" : "CRT: Off"}
     </button>
   );
 }
+
