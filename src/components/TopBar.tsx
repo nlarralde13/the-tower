@@ -1,74 +1,93 @@
+// components/TopBar.tsx
 "use client";
 
+import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
-import { usePathname } from "next/navigation";
 import { useSession, signIn, signOut } from "next-auth/react";
+import styles from "./TopBar.module.css";
 
-import CrtToggle from "@/components/CrtToggle";
+function useCRT() {
+  const [crtEnabled, setCRT] = useState<boolean>(false);
 
-const NAV_LINKS = [
-  { href: "/", label: "Main Menu" },
-  { href: "/climb", label: "Climb" },
-  { href: "/traders", label: "Traders" },
-  { href: "/crafters", label: "Crafters" },
-  { href: "/inn", label: "Inn" },
-  { href: "/training", label: "Training" },
-  { href: "/play", label: "Play" },
-];
+  // Load persisted preference on mount
+  useEffect(() => {
+    const raw = typeof window !== "undefined" ? localStorage.getItem("pref:crt") : null;
+    setCRT(raw === "1");
+  }, []);
 
-function isActive(pathname: string, href: string) {
-  if (href === "/") {
-    return pathname === "/";
-  }
+  // Apply to <html> as a data-attribute for CSS hooks
+  useEffect(() => {
+    if (typeof document === "undefined") return;
+    const root = document.documentElement;
+    if (crtEnabled) root.setAttribute("data-crt", "on");
+    else root.removeAttribute("data-crt");
+    try {
+      localStorage.setItem("pref:crt", crtEnabled ? "1" : "0");
+    } catch {}
+  }, [crtEnabled]);
 
-  return pathname.startsWith(href);
+  return { crtEnabled, setCRT };
 }
 
 export default function TopBar() {
-  const pathname = usePathname();
-  const { status, data } = useSession();
-  const name = data?.user?.name ?? "Seeker";
-  const img = data?.user?.image ?? "";
-  const initial = name?.[0]?.toUpperCase() ?? "?";
+  const { data: session, status } = useSession();
+  const { crtEnabled, setCRT } = useCRT();
+
+  const displayName = useMemo(() => {
+    if (!session?.user) return "Guest";
+    return session.user.name ?? session.user.email ?? "Adventurer";
+  }, [session?.user]);
+
+  const initial = (session?.user?.name ?? session?.user?.email ?? "?").slice(0, 1).toUpperCase();
 
   return (
-    <header className="topbar">
-      <div className="topbar__profile">
-        {img ? (
-          <img className="avatar" src={img} alt="" />
-        ) : (
-          <div className="avatar avatar--fallback">{initial}</div>
-        )}
-        <div className="who">
-          {status === "authenticated" ? `Signed in as ${name}` : "Not signed in"}
+    <header className={styles.bar} role="navigation" aria-label="Top">
+      <div className={styles.left}>
+        <Link href="/" className={styles.brand}>
+          <span className={styles.rune}>⟟</span>
+          <span className={styles.brandText}>The Tower</span>
+        </Link>
+      </div>
+
+      <div className={styles.center}>
+        <div className={styles.identity} title={`Signed in as ${displayName}`}>
+          <div className={styles.avatar} aria-hidden="true">
+            {session?.user?.image ? (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img src={session.user.image} alt="" referrerPolicy="no-referrer" />
+            ) : (
+              <span>{initial}</span>
+            )}
+          </div>
+          <div className={styles.idText}>
+            <span className={styles.idLabel}>Signed in as</span>
+            <span className={styles.idName}>{displayName}</span>
+          </div>
         </div>
       </div>
 
-      <nav className="topbar__nav" aria-label="Main navigation">
-        {NAV_LINKS.map((link) => {
-          const active = isActive(pathname ?? "/", link.href);
+      <div className={styles.right}>
+        <Link href="/settings" className={styles.ghostBtn} aria-label="Settings">
+          <span className={styles.icon}>⚙</span>
+          <span className={styles.btnText}>Settings</span>
+        </Link>
 
-          return (
-            <Link
-              key={link.href}
-              href={link.href}
-              className={`topbar__nav-link${active ? " topbar__nav-link--active" : ""}`}
-              aria-current={active ? "page" : undefined}
-            >
-              {link.label}
-            </Link>
-          );
-        })}
-      </nav>
+        <button
+          className={styles.switch}
+          onClick={() => setCRT(!crtEnabled)}
+          aria-pressed={crtEnabled}
+          aria-label="Toggle CRT filter"
+        >
+          <span className={styles.switchKnob} />
+          <span className={styles.switchLabel}>{crtEnabled ? "CRT" : "Clean"}</span>
+        </button>
 
-      <div className="topbar__controls">
-        <CrtToggle />
         {status === "authenticated" ? (
-          <button className="topbar__button" onClick={() => signOut()}>
+          <button className={styles.primaryBtn} onClick={() => signOut({ callbackUrl: "/" })}>
             Sign out
           </button>
         ) : (
-          <button className="topbar__button" onClick={() => signIn("google")}>
+          <button className={styles.primaryBtn} onClick={() => signIn("google")}>
             Sign in
           </button>
         )}

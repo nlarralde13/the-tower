@@ -1,6 +1,6 @@
 import "../app/globals.css";
 import Providers from "@/components/Providers";
-import CrtOverlay from "@/components/CrtOverlay";
+
 import TopBar from "@/components/TopBar";
 
 export const metadata = {
@@ -17,7 +17,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
             <TopBar />
             <div className="app-main">{children}</div>
           </div>
-          <CrtOverlay />
+          
         </Providers>
       </body>
     </html>
