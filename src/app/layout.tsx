@@ -1,13 +1,17 @@
-// src/app/layout.tsx
+import type { ReactNode } from "react";
 import "../app/globals.css";
-import { SessionProvider } from "next-auth/react";
 import Providers from "@/components/Providers";
 
-export default function RootLayout({ children }: { children: React.ReactNode }) {
+export const metadata = {
+  title: "The Tower — Pocket Run Edition",
+  description: "One-thumb tower crawler.",
+};
+
+export default function RootLayout({ children }: { children: ReactNode }) {
   return (
     <html lang="en">
       <body>
-        <SessionProvider>{children}</SessionProvider>
+        <Providers>{children}</Providers>
       </body>
     </html>
   );
