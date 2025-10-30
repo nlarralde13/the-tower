@@ -1,9 +1,10 @@
+// jsconfig.json  (or tsconfig.json if you already have that)
 {
   "compilerOptions": {
-    "baseUrl": ".",
+    "baseUrl": "src",
     "paths": {
       "@/*": [
-        "./src/*"
+        "*"
       ]
     },
     "target": "ES2017",
@@ -31,8 +32,8 @@
   },
   "include": [
     "next-env.d.ts",
-    ".next/types/**/*.ts",
-    ".next/dev/types/**/*.ts",
+    ".next\\dev/types/**/*.ts",
+    ".next\\dev/types/**/*.ts",
     "**/*.mts",
     "**/*.ts",
     "**/*.tsx"

@@ -24,3 +24,26 @@ body {
   color: var(--foreground);
   font-family: Arial, Helvetica, sans-serif;
 }
+:root { color-scheme: dark; }
+html, body { background:#0a0a0a; }
+* { -webkit-tap-highlight-color: transparent; }
+@media (pointer:coarse) {
+  a, button { min-height: 56px; }
+}
+.topbar{
+  position:sticky; top:0; z-index:10;
+  display:flex; align-items:center; justify-content:space-between;
+  height:48px; padding:0 12px;
+  background:rgba(19,17,26,.7); border-bottom:1px solid #262438;
+  backdrop-filter: blur(6px) saturate(120%);
+}
+.userbox{display:flex; align-items:center; gap:10px; min-width:0}
+.avatar{
+  width:28px; height:28px; border-radius:50%; object-fit:cover; border:1px solid #262438;
+}
+.avatar--fallback{
+  display:grid; place-items:center; font-weight:700; background:#2a2440; color:#c5a3ff;
+}
+.who{font-size:13px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; max-width:60vw}
+.link{background:none; border:none; color:#c5a3ff; padding:8px 10px; font-weight:600}
+.btn.primary{height:36px; border-radius:12px; padding:0 12px}
