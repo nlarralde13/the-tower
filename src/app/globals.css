@@ -8,6 +8,17 @@
   --bg:#0b0a0f; --panel:#15121d; --ink:#e8e5ff; --muted:#aaa6c7;
   --line:#2b2640; --accent:#d7c3ff; --shadow:rgba(0,0,0,.35);
 }
+body {
+  margin: 0;
+  min-height: 100dvh;
+  background: 
+    url("/backgrounds/tower-bg.jpg") center center / cover no-repeat fixed,
+    radial-gradient(1200px 600px at 50% -10%, #1a1630 0%, #0b0a0f 55%);
+  background-attachment: fixed;
+  color: var(--ink);
+  -webkit-font-smoothing: antialiased;
+}
+
 
 html, body {
   height:100%;
@@ -89,3 +100,103 @@ html, body {
 .btn.idp{flex:1; background:rgba(255,255,255,0.05); border:1px solid var(--line);}
 .idp-row{display:flex; gap:12px; width:100%; max-width:320px; margin:0 auto;}
 .divider{font-size:12px; color:var(--muted); margin:16px 0; text-transform:uppercase; letter-spacing:0.1em;}
+/* ===== CRT THEME ===== */
+:root {
+  --crt-scanline-opacity: .12;   /* 0–.25 */
+  --crt-vignette-opacity: .35;   /* 0–.6  */
+  --crt-noise-opacity: .035;     /* 0–.08 */
+  --crt-flicker-min: .96;
+  --crt-flicker-max: 1;
+}
+
+/* Turn on CRT by adding .crt to <html> */
+html.crt body {
+  position: relative;
+  isolation: isolate; /* keep overlays above page but below modals if any */
+}
+
+/* Vignette */
+html.crt body::before {
+  content: "";
+  position: fixed; inset: 0;
+  pointer-events: none;
+  background:
+    radial-gradient(120% 120% at 50% 50%, rgba(0,0,0,0) 60%, rgba(0,0,0,var(--crt-vignette-opacity)) 100%);
+  z-index: 1; /* below scanlines/noise */
+}
+
+/* Scanlines + subtle RGB mask drift */
+html.crt body::after {
+  content: "";
+  position: fixed; inset: 0;
+  pointer-events: none;
+  z-index: 2;
+  background:
+    /* faint RGB subpixel trick */
+    linear-gradient(0deg, rgba(255,0,0,.03), rgba(0,255,255,.03)),
+    repeating-linear-gradient(
+      to bottom,
+      rgba(255,255,255,var(--crt-scanline-opacity)) 0px,
+      rgba(255,255,255,var(--crt-scanline-opacity)) 1px,
+      rgba(0,0,0,0) 2px,
+      rgba(0,0,0,0) 4px
+    );
+  mix-blend-mode: overlay;
+  animation: crt-drift 7s linear infinite, crt-flicker 2.4s steps(2, end) infinite;
+  will-change: transform, opacity;
+}
+
+/* Noise layer (very light) */
+html.crt .crt-noise {
+  position: fixed; inset: 0;
+  pointer-events: none;
+  z-index: 3;
+  opacity: var(--crt-noise-opacity);
+  background-image:
+    url("data:image/svg+xml;utf8,\
+      <svg xmlns='http://www.w3.org/2000/svg' width='128' height='128'>\
+        <filter id='n'><feTurbulence type='fractalNoise' baseFrequency='.95' numOctaves='2' stitchTiles='stitch'/></filter>\
+        <rect width='100%%' height='100%%' filter='url(#n)' opacity='.9'/>\
+      </svg>");
+  background-size: 256px 256px;
+  animation: crt-noise 1.2s steps(4,end) infinite;
+  will-change: transform;
+}
+
+/* Subtle bloom + aberration for text */
+html.crt body, html.crt .menu-panel, html.crt .menu-link {
+  filter: saturate(110%) contrast(102%);
+}
+html.crt .panel-title, html.crt .menu-label {
+  text-shadow:
+    0 0 6px rgba(197,163,255,.18),
+    1px 0 0 rgba(255,0,0,.08),
+   -1px 0 0 rgba(0,255,255,.08);
+}
+
+/* Animations */
+@keyframes crt-drift {
+  0%   { transform: translateY(0px); }
+  50%  { transform: translateY(-0.5px); }
+  100% { transform: translateY(0px); }
+}
+@keyframes crt-flicker {
+  0%   { opacity: var(--crt-flicker-max); }
+  50%  { opacity: var(--crt-flicker-min); }
+  100% { opacity: var(--crt-flicker-max); }
+}
+@keyframes crt-noise {
+  0%   { transform: translate(0,0); }
+  25%  { transform: translate(-5%, 3%); }
+  50%  { transform: translate(4%, -2%); }
+  75%  { transform: translate(-3%, -4%); }
+  100% { transform: translate(0,0); }
+}
+
+/* Respect accessibility */
+@media (prefers-reduced-motion: reduce) {
+  html.crt body::after,
+  html.crt .crt-noise {
+    animation: none;
+  }
+}

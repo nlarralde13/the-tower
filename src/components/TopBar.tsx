@@ -1,5 +1,17 @@
 "use client";
 import { useSession, signIn, signOut } from "next-auth/react";
+import CrtToggle from "@/components/CrtToggle";
+// ...
+<header className="topbar">
+  <div className="userbox">...</div>
+  <div style={{display:"flex", gap:8}}>
+    <CrtToggle />
+    {status === "authenticated"
+      ? <button className="link" onClick={() => signOut()}>Sign out</button>
+      : <button className="link" onClick={() => signIn("google")}>Sign in</button>}
+  </div>
+</header>
+
 
 export default function TopBar() {
   const { status, data } = useSession();
@@ -31,3 +43,4 @@ export default function TopBar() {
     </header>
   );
 }
+
