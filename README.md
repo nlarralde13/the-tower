@@ -29,8 +29,15 @@ To learn more about Next.js, take a look at the following resources:
 
 You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
 
-## Deploy on Vercel
+## Epic 1 — Retro Look & TopBar
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+The “Thumb UX & Mobile Flow” epic introduces a static retro treatment and persistent accessibility preferences:
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+- A transparent scanline overlay is expected at `/public/overlays/scanlines.png` and is always mounted once at the root. The repository does not track the bitmap so the element simply fades in/out when the asset is provided downstream.
+- The soft retro filter is a class-based wrapper that applies `contrast(1.07)` and `brightness(0.97)` plus a fixed vignette. Both modes honour `prefers-reduced-motion`.
+- Preferences persist to `localStorage` under `pref:retro`, `pref:hc`, `pref:textlg`, and `pref:haptics`. They hydrate through a shared `PreferencesProvider` that updates `<html>` attributes for `[data-hc]` and `[data-bigtext]`.
+- The refreshed TopBar keeps a 64px touch target, centres the identity block, and exposes Settings and Sign in/out actions with accessible focus states.
+- Page backgrounds are supplied per route through `<PageSurface backgroundImage="/backgrounds/..." />`, layered with a static gradient and grain for a stable, non-jitter look. As with the overlay, ship the background bitmaps out-of-band under `/public/backgrounds/`.
+- PWA icons are referenced from `/public/icons/icon-192.png` and `/public/icons/icon-512.png`. Provide production-ready PNGs outside of this repository to avoid large binary diffs in pull requests.
+
+Visit `/settings` to toggle retro modes, high contrast, large text, and future haptics support.
