@@ -11,22 +11,21 @@ export default function MainMenu() {
   ];
 
   return (
-    <main className="main">
-      <h2 className="title">Where do you wish to go?</h2>
-      <ul className="menu">
-        {menu.map((item) => (
-          <li key={item.href}>
-            <Link href={item.href} className="menu-item">
-              <div className="dot" />
-              <div className="labels">
-                <span className="label">{item.label}</span>
-                <span className="sub">{item.subtitle}</span>
-              </div>
-              <span className="chev">›</span>
-            </Link>
-          </li>
-        ))}
-      </ul>
+    <main className="tower-shell">
+      <div className="menu-panel">
+        <h2 className="panel-title">Where do you wish to go?</h2>
+        <ul className="menu-list">
+          {menu.map((item) => (
+            <li key={item.href}>
+              <Link href={item.href} className="menu-link">
+                <span className="menu-label">{item.label}</span>
+                <span className="menu-sub">{item.subtitle}</span>
+                <span className="menu-chev">›</span>
+              </Link>
+            </li>
+          ))}
+        </ul>
+      </div>
     </main>
   );
 }
