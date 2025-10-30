@@ -30,21 +30,18 @@ export default function PageSurface({
   className,
   children,
 }: PageSurfaceProps) {
-  const style: React.CSSProperties = {};
+  const style: (React.CSSProperties & Record<string, string>) = {};
 
   if (backgroundImage) {
-    // Pass to CSS as variable so :before can render it
-    style["--page-background" as any] = `url(${backgroundImage})`;
+    style["--page-background-image"] = `url(${backgroundImage})`;
   }
+
   if (overlay) {
-    style["--page-overlay" as any] = overlay;
+    style["--page-overlay"] = overlay;
   }
 
   return (
-    <div
-      className={clsx("page", full && "page--full", className)}
-      style={style}
-    >
+    <div className={clsx("page-surface", full && "page-surface--full", className)} style={style}>
       {children}
     </div>
   );

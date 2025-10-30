@@ -7,13 +7,7 @@ import { parseCommand } from "@/game/commands";
 type Line = { ts: number; text: string };
 
 export default function ConsolePanel({ maxLines = 5 }: { maxLines?: number }) {
-  const [history, setHistory] = useState<Line[]>([]);
-  const [value, setValue] = useState("");
-  const scrollRef = useRef<HTMLDivElement | null>(null);
-
-  const LINE_H = 22; // px
-
-  useEffect(() => {
+  const [history, setHistory] = useState<Line[]>(() => {
     const snap = getSnapshot?.();
     const init: Line[] = [];
 
@@ -29,8 +23,12 @@ export default function ConsolePanel({ maxLines = 5 }: { maxLines?: number }) {
       text: "Commands: look | move <left/right/up/down> | help",
     });
 
-    setHistory(init);
-  }, []);
+    return init;
+  });
+  const [value, setValue] = useState("");
+  const scrollRef = useRef<HTMLDivElement | null>(null);
+
+  const LINE_H = 22; // px
 
   useEffect(() => {
     const el = scrollRef.current;

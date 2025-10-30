@@ -4,18 +4,10 @@ import Screen from "@/components/Screen";
 
 export default function Page() {
   return (
-    <div
-      style={{
-        minHeight: "100dvh",
-        backgroundImage: 'url("/backgrounds/crafters-bg.png")',
-        backgroundSize: "cover",
-        backgroundPosition: "center",
-        backgroundRepeat: "no-repeat",
-      }}
-    >
+    <PageSurface backgroundImage="/backgrounds/crafters-bg.png">
       <AuthGate>
         <Screen title="Crafters Guild" note="Where scraps become relics." />
       </AuthGate>
-    </div>
+    </PageSurface>
   );
 }
