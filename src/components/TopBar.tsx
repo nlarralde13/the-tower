@@ -1,79 +1,179 @@
+// components/TopBar.tsx
 "use client";
 
+import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
-import { signIn, signOut, useSession } from "next-auth/react";
-import clsx from "clsx";
-import { useMemo } from "react";
-
 import styles from "./TopBar.module.css";
 
-export default function TopBar() {
-  const { data: session, status } = useSession();
+type Gauge = { current: number; max: number };
+type PlayerStats = {
+  hp: Gauge;
+  mp: Gauge;
+  stamina: Gauge;
+};
 
-  const displayName = useMemo(() => {
-    if (!session?.user) return "Guest";
-    return session.user.name ?? session.user.email ?? "Adventurer";
-  }, [session?.user]);
+type TopBarProps = {
+  playerStats?: PlayerStats;
+  // Optional: show signed-in state or avatar later if you want
+  signedIn?: boolean;
+  displayName?: string;
+};
 
-  const initial = (session?.user?.name ?? session?.user?.email ?? "?").slice(0, 1).toUpperCase();
+function pct(g: Gauge) {
+  const max = Math.max(1, g.max ?? 1);
+  const cur = Math.max(0, Math.min(g.current ?? 0, max));
+  return Math.round((cur / max) * 100);
+}
+
+export default function TopBar({
+  playerStats = {
+    hp: { current: 32, max: 40 },
+    mp: { current: 18, max: 28 },
+    stamina: { current: 54, max: 60 },
+  },
+  signedIn,
+  displayName,
+}: TopBarProps) {
+  const [open, setOpen] = useState(false);
+  const drawerRef = useRef<HTMLDivElement | null>(null);
+
+  // Close drawer on route change (best-effort without router events)
+  useEffect(() => {
+    const onHash = () => setOpen(false);
+    window.addEventListener("hashchange", onHash);
+    return () => window.removeEventListener("hashchange", onHash);
+  }, []);
+
+  // Close on Esc
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setOpen(false);
+    };
+    document.addEventListener("keydown", onKey);
+    return () => document.removeEventListener("keydown", onKey);
+  }, []);
+
+  const hpPct = pct(playerStats.hp);
+  const mpPct = pct(playerStats.mp);
+  const stPct = pct(playerStats.stamina);
 
   return (
-    <header className={styles.bar} role="banner">
-      <div className={styles.left}>
-        <Link href="/" className={styles.brand} aria-label="Return to landing">
-          <span aria-hidden className={styles.rune}>
-            ⟟
-          </span>
-          <span className={styles.brandText}>
-            <span className={styles.brandTitle}>The Tower</span>
-            <span className={styles.brandSubtitle}>Pocket Run Edition</span>
-          </span>
-        </Link>
+    <>
+      <div className={styles.bar}>
+        {/* Burger */}
+        <button
+          className={`${styles.burger} ${open ? styles.burgerOpen : ""}`}
+          aria-label="Open menu"
+          aria-expanded={open}
+          aria-controls="nav-drawer"
+          onClick={() => setOpen((v) => !v)}
+        >
+          <span />
+          <span />
+          <span />
+        </button>
+
+        {/* HUD meters */}
+        <div className={styles.hud} role="status" aria-live="polite">
+          <Meter
+            label="HP"
+            icon="❤️"
+            percent={hpPct}
+            text={`${playerStats.hp.current}/${playerStats.hp.max}`}
+            colorVar="--hp"
+          />
+          <Meter
+            label="MP"
+            icon="🔵"
+            percent={mpPct}
+            text={`${playerStats.mp.current}/${playerStats.mp.max}`}
+            colorVar="--mp"
+          />
+          <Meter
+            label="STA"
+            icon="⚡"
+            percent={stPct}
+            text={`${playerStats.stamina.current}/${playerStats.stamina.max}`}
+            colorVar="--st"
+          />
+        </div>
+
+        {/* Right spacer keeps layout tidy if you later add icons */}
+        <div className={styles.rightSpacer} aria-hidden="true" />
       </div>
 
-      <div className={styles.center}>
-        <div className={styles.identity} title={`Signed in as ${displayName}`}>
-          <div className={styles.avatar} aria-hidden>
-            {session?.user?.image ? (
-              // eslint-disable-next-line @next/next/no-img-element
-              <img src={session.user.image} alt="" referrerPolicy="no-referrer" />
-            ) : (
-              <span aria-hidden>{initial}</span>
-            )}
-          </div>
-          <div className={styles.idCopy} aria-live="polite">
-            <span className={styles.idLabel}>Signed in as</span>
-            <span className={styles.idName}>{status === "loading" ? "Loading…" : displayName}</span>
+      {/* Scrim */}
+      <button
+        className={`${styles.scrim} ${open ? styles.scrimVisible : ""}`}
+        aria-label="Close menu"
+        onClick={() => setOpen(false)}
+      />
+
+      {/* Drawer */}
+      <nav
+        id="nav-drawer"
+        ref={drawerRef}
+        className={`${styles.drawer} ${open ? styles.drawerOpen : ""}`}
+        aria-hidden={!open}
+      >
+        <div className={styles.drawerHeader}>
+          <div className={styles.brandDot} aria-hidden="true">⎈</div>
+          <div className={styles.brandCopy}>
+            <div className={styles.brandTitle}>The Tower</div>
+            <div className={styles.brandSubtitle}>
+              {signedIn ? `Signed in${displayName ? ` • ${displayName}` : ""}` : "Guest"}
+            </div>
           </div>
         </div>
-      </div>
 
-      <nav className={styles.right} aria-label="Primary actions">
-        <Link href="/settings" className={clsx("btn", "btn--ghost", styles.action)}>
-          <span aria-hidden className={styles.actionIcon}>
-            ⚙
-          </span>
-          <span>Settings</span>
-        </Link>
-
-        {status === "authenticated" ? (
-          <button
-            type="button"
-            className={clsx("btn", "btn--primary", styles.action)}
-            onClick={() => signOut({ callbackUrl: "/" })}
-          >
-            Sign out
-          </button>
-        ) : (
-          <button
-            type="button"
-            className={clsx("btn", "btn--primary", styles.action)}
-            onClick={() => signIn("google")}
-          >
-            Sign in
-          </button>
-        )}
+        <ul className={styles.menuList}>
+          <li><Link href="/" className={styles.menuLink} onClick={() => setOpen(false)}>🏰 Home</Link></li>
+          <li><Link href="/climb" className={styles.menuLink} onClick={() => setOpen(false)}>🧗 Climb the Tower</Link></li>
+          <li><Link href="/traders" className={styles.menuLink} onClick={() => setOpen(false)}>🪙 Traders’ Guild</Link></li>
+          <li><Link href="/crafters" className={styles.menuLink} onClick={() => setOpen(false)}>⚒️ Crafters’ Guild</Link></li>
+          <li><Link href="/inn" className={styles.menuLink} onClick={() => setOpen(false)}>🍺 The Inn</Link></li>
+          <li><Link href="/training" className={styles.menuLink} onClick={() => setOpen(false)}>🏹 Training Grounds</Link></li>
+          <li className={styles.rule} aria-hidden="true" />
+          <li><Link href="/settings" className={styles.menuLink} onClick={() => setOpen(false)}>⚙️ Settings</Link></li>
+          <li>
+            <Link
+              href={signedIn ? "/api/auth/signout" : "/api/auth/signin"}
+              className={styles.menuLink}
+              onClick={() => setOpen(false)}
+            >
+              {signedIn ? "🔓 Sign out" : "🔐 Sign in"}
+            </Link>
+          </li>
+        </ul>
       </nav>
-    </header>
+    </>
+  );
+}
+
+function Meter({
+  label,
+  icon,
+  percent,
+  text,
+  colorVar,
+}: {
+  label: string;
+  icon: string;
+  percent: number;
+  text: string;
+  colorVar: "--hp" | "--mp" | "--st";
+}) {
+  return (
+    <div className={styles.meter} data-color={colorVar}>
+      <div className={styles.meterHeader} aria-hidden="true">
+        <span className={styles.meterIcon}>{icon}</span>
+        <span className={styles.meterLabel}>{label}</span>
+      </div>
+      <div className={styles.meterBar} role="progressbar" aria-valuenow={percent} aria-valuemin={0} aria-valuemax={100}>
+        <div className={styles.meterFill} style={{ width: `${percent}%` }} />
+        <div className={styles.meterText}>{text}</div>
+      </div>
+      
+    </div>
   );
 }

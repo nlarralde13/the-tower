@@ -1,0 +1,24 @@
+{
+  "tower_id": "standard_demo",
+  "display_name": "The First Tower",
+  "description": "A five-floor training tower. Rumors say a guardian awaits on the top floor.",
+  "floor_count": 5,
+  "floors": {
+    "1": { "difficulty": 1, "room_ratios": { "combat": 0.45, "trap": 0.1, "loot": 0.25, "out": 0.05, "special": 0.15 } },
+    "2": { "difficulty": 2, "room_ratios": { "combat": 0.5, "trap": 0.15, "loot": 0.2, "out": 0.05, "special": 0.1 } },
+    "3": { "difficulty": 3, "room_ratios": { "combat": 0.55, "trap": 0.15, "loot": 0.15, "out": 0.05, "special": 0.1 } },
+    "4": { "difficulty": 4, "room_ratios": { "combat": 0.6, "trap": 0.1, "loot": 0.15, "out": 0.05, "special": 0.1 } },
+    "5": { "difficulty": 5, "room_ratios": { "combat": 0.5, "trap": 0.05, "loot": 0.1, "out": 0.05, "special": 0.3 }, "boss_room": true }
+  },
+  "mutators": [],
+  "scaling": {
+    "enemy_level_base": 1,
+    "enemy_level_step": 1,
+    "loot_quality_step": 0.1
+  },
+  "rules": {
+    "requires_valid_path": true,
+    "exit_requires_boss_clear": true,
+    "allow_random_exits": false
+  }
+}

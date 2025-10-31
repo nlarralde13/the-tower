@@ -10,9 +10,13 @@ export const metadata: Metadata = {
   manifest: "/manifest.webmanifest",
 };
 
+
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <html lang="en" suppressHydrationWarning>
+      <link rel="manifest" href="/manifest.webmanifest" />
+      <meta name="theme-color" content="#0b0b11" />
+
       <body>
         <a className="skip-link" href="#main-content">
           Skip to content
