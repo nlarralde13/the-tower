@@ -7,6 +7,8 @@ export interface RoomRatios {
   loot: number;
   out: number;
   special: number;
+  /** Optional proportion of intentionally empty rooms. */
+  empty?: number;
 }
 
 export interface FloorConfig {
@@ -37,9 +39,20 @@ export interface Ruleset {
   scaling: ScalingRules;
   rules: TowerRules;
 }
+
 // --- Grid & generation types ---
 
-export type RoomType = "entry" | "exit" | "boss" | "combat" | "trap" | "loot" | "out" | "special" | "empty";
+export type RoomType =
+  | "entry"
+  | "exit"
+  | "boss"
+  | "combat"
+  | "trap"
+  | "loot"
+  | "out"
+  | "special"
+  | "empty"
+  | "blocked"; // <-- new
 
 export interface Cell {
   x: number;
@@ -48,10 +61,10 @@ export interface Cell {
 }
 
 export interface FloorGrid {
-  width: number;   // always 8
-  height: number;  // always 8
-  cells: Cell[];   // flat list, index = y * width + x
+  width: number; // 8
+  height: number; // 8
+  cells: Cell[]; // index = y * width + x
   entry: { x: number; y: number };
   exit: { x: number; y: number };
-  boss?: { x: number; y: number }; // only on last floor
+  boss?: { x: number; y: number };
 }

@@ -35,58 +35,53 @@ const BUTTON_STYLE: React.CSSProperties = {
 };
 
 const COLOR_MAP: Record<RoomType, string> = {
-  entry:   "#5eead4", // teal
-  exit:    "#22d3ee", // cyan
-  boss:    "#ef4444", // red
-  combat:  "#a78bfa", // violet
-  trap:    "#f59e0b", // amber
-  loot:    "#10b981", // green
-  out:     "#eab308", // yellow
-  special: "#f472b6", // pink
-  empty:   "#1f2937", // slate
+  entry:   "#5eead4",
+  exit:    "#22d3ee",
+  boss:    "#ef4444",
+  combat:  "#a78bfa",
+  trap:    "#f59e0b",
+  loot:    "#10b981",
+  out:     "#eab308",
+  special: "#f472b6",
+  empty:   "#1f2937",
+  blocked: "#0b0b0b",
 };
 
 export default function DevPage() {
-  // ----- Validator state -----
+  // Validator
   const [report, setReport] = useState<Report | null>(null);
   const [isRunning, setIsRunning] = useState(false);
   const [rulesetPath, setRulesetPath] = useState("/data/rulesetTemplate.json");
 
-  // ----- Floor generator state -----
+  // Generation
   const [ruleset, setRuleset] = useState<Ruleset | null>(null);
   const [floorIdx, setFloorIdx] = useState(1);
   const [seed, setSeed] = useState<string>("123456");
   const [grid, setGrid] = useState<FloorGrid | null>(null);
   const [busyGen, setBusyGen] = useState(false);
 
-  // Load ruleset once (also runs validator automatically)
+  // Live tuning knobs
+  const [minEmpty, setMinEmpty]   = useState(0.6);
+  const [pathBias, setPathBias]   = useState(0.75);
+  const [blocked, setBlocked]     = useState(0.15);
+  const [mazeMode, setMazeMode]   = useState(true);
+  const [openFrac, setOpenFrac]   = useState(0.45); // ~55% blocked when maze mode on
+  const [wiggle, setWiggle]       = useState(0.35); // 0..1
+
   useEffect(() => {
     (async () => {
       setIsRunning(true);
       const val = await validateRuleset(rulesetPath);
       setReport({ ok: val.ok, issues: val.issues });
       setIsRunning(false);
-
       try {
         const res = await fetch(rulesetPath);
-        if (res.ok) {
-          const json = (await res.json()) as Ruleset;
-          setRuleset(json);
-        }
-      } catch (e) {
-        // ignore — validator already reported failures
-      }
+        if (res.ok) setRuleset((await res.json()) as Ruleset);
+      } catch {}
     })();
   }, [rulesetPath]);
 
-  const legend = useMemo(
-    () =>
-      (Object.keys(COLOR_MAP) as RoomType[]).map((k) => ({
-        key: k,
-        color: COLOR_MAP[k],
-      })),
-    []
-  );
+  const legend = useMemo(() => (Object.keys(COLOR_MAP) as RoomType[]).map((k) => ({ key: k, color: COLOR_MAP[k] })), []);
 
   async function runValidator() {
     setIsRunning(true);
@@ -99,7 +94,6 @@ export default function DevPage() {
     if (!ruleset) return;
     const s = parseInt(seed || "0", 10);
     const rng: RNG = mulberry32(Number.isFinite(s) ? s : 0);
-
     const floorKey = String(floorIdx);
     const cfg: FloorConfig | undefined = ruleset.floors?.[floorKey];
     if (!cfg) return;
@@ -110,7 +104,14 @@ export default function DevPage() {
       !!ruleset.rules?.exit_requires_boss_clear;
 
     setBusyGen(true);
-    const f = generateFloor(rng, floorIdx, cfg, isFinal);
+    const f = generateFloor(rng, floorIdx, cfg, isFinal, {
+      minEmptyFraction: minEmpty,
+      pathEmptyBias: pathBias,
+      blockedFraction: blocked,
+      mazeMode,
+      openFraction: openFrac,
+      wiggle,
+    });
     setGrid(f);
     setBusyGen(false);
   }
@@ -118,11 +119,9 @@ export default function DevPage() {
   return (
     <div style={{ padding: 16, maxWidth: 980, margin: "0 auto" }}>
       <h1 style={{ marginBottom: 8 }}>Developer Tools</h1>
-      <p style={{ marginTop: 0, opacity: 0.8 }}>
-        Local checks and previews for <strong>The Tower</strong>.
-      </p>
+      <p style={{ marginTop: 0, opacity: 0.8 }}>Local checks and previews for <strong>The Tower</strong>.</p>
 
-      {/* ===== Card 1: Ruleset Validator ===== */}
+      {/* Card 1: Validator */}
       <section style={CARD_STYLE}>
         <header style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 12 }}>
           <h2 style={{ margin: 0, fontSize: 18 }}>Ruleset Validator</h2>
@@ -130,22 +129,9 @@ export default function DevPage() {
         </header>
 
         <div style={{ display: "flex", gap: 8, alignItems: "center", marginBottom: 12 }}>
-          <label htmlFor="ruleset-path" style={{ fontSize: 14, opacity: 0.85, minWidth: 120 }}>
-            Ruleset path
-          </label>
-          <input
-            id="ruleset-path"
-            value={rulesetPath}
-            onChange={(e) => setRulesetPath(e.target.value)}
-            style={INPUT_STYLE}
-            spellCheck={false}
-          />
-          <button
-            onClick={runValidator}
-            disabled={isRunning}
-            style={{ ...BUTTON_STYLE, background: isRunning ? "rgba(255,255,255,0.08)" : BUTTON_STYLE.background }}
-            aria-busy={isRunning}
-          >
+          <label htmlFor="ruleset-path" style={{ fontSize: 14, opacity: 0.85, minWidth: 120 }}>Ruleset path</label>
+          <input id="ruleset-path" value={rulesetPath} onChange={(e) => setRulesetPath(e.target.value)} style={INPUT_STYLE} spellCheck={false} />
+          <button onClick={runValidator} disabled={isRunning} style={{ ...BUTTON_STYLE, background: isRunning ? "rgba(255,255,255,0.08)" : BUTTON_STYLE.background }} aria-busy={isRunning}>
             {isRunning ? "Running…" : "Run Validator"}
           </button>
         </div>
@@ -153,12 +139,8 @@ export default function DevPage() {
         {report && (
           <>
             <div style={{ margin: "8px 0 12px", fontSize: 14, opacity: 0.85 }}>
-              Result:{" "}
-              <strong style={{ color: report.ok ? "limegreen" : "salmon" }}>
-                {report.ok ? "Valid" : "Invalid"}
-              </strong>{" "}
-              — {report.issues.filter((i) => i.level === "error").length} errors,{" "}
-              {report.issues.filter((i) => i.level === "warn").length} warnings
+              Result: <strong style={{ color: report.ok ? "limegreen" : "salmon" }}>{report.ok ? "Valid" : "Invalid"}</strong>{" "}
+              — {report.issues.filter(i => i.level === "error").length} errors, {report.issues.filter(i => i.level === "warn").length} warnings
             </div>
             <IssuesTable issues={report.issues} />
           </>
@@ -166,102 +148,100 @@ export default function DevPage() {
         {!report && !isRunning && <p style={{ opacity: 0.8 }}>No report yet. Click “Run Validator.”</p>}
       </section>
 
-      {/* ===== Card 2: Floor Generator & Preview ===== */}
+      {/* Card 2: Floor Generator + Corridor Mode */}
       <section style={CARD_STYLE}>
         <header style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 12 }}>
           <h2 style={{ margin: 0, fontSize: 18 }}>Floor Generator Preview</h2>
-          <span style={{ fontSize: 12, opacity: 0.8 }}>
-            8×8 grid · seeded · boss-adjacent exit on final floor
-          </span>
+          <span style={{ fontSize: 12, opacity: 0.8 }}>8×8 grid · seeded · corridor/maze mode</span>
         </header>
 
         <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center", marginBottom: 12 }}>
-          <label htmlFor="seed" style={{ fontSize: 14, opacity: 0.85, minWidth: 80 }}>
-            Seed
-          </label>
-          <input
-            id="seed"
-            value={seed}
-            onChange={(e) => setSeed(e.target.value)}
-            style={{ ...INPUT_STYLE, maxWidth: 200 }}
-            spellCheck={false}
-          />
+          <label htmlFor="seed" style={{ fontSize: 14, opacity: 0.85, minWidth: 80 }}>Seed</label>
+          <input id="seed" value={seed} onChange={(e) => setSeed(e.target.value)} style={{ ...INPUT_STYLE, maxWidth: 200 }} spellCheck={false} />
 
-          <label htmlFor="floor" style={{ fontSize: 14, opacity: 0.85, minWidth: 80, marginLeft: 8 }}>
-            Floor
-          </label>
-          <select
-            id="floor"
-            value={floorIdx}
-            onChange={(e) => setFloorIdx(parseInt(e.target.value, 10))}
-            style={{
-              ...INPUT_STYLE,
-              maxWidth: 120,
-              padding: "8px 10px",
-              appearance: "none",
-              cursor: "pointer",
-            }}
-          >
+          <label htmlFor="floor" style={{ fontSize: 14, opacity: 0.85, minWidth: 80, marginLeft: 8 }}>Floor</label>
+          <select id="floor" value={floorIdx} onChange={(e) => setFloorIdx(parseInt(e.target.value, 10))}
+            style={{ ...INPUT_STYLE, maxWidth: 120, padding: "8px 10px", appearance: "none", cursor: "pointer" }}>
             {Array.from({ length: Math.max(1, ruleset?.floor_count ?? 5) }, (_, i) => i + 1).map((n) => (
-              <option key={n} value={n}>
-                {n}
-              </option>
+              <option key={n} value={n}>{n}</option>
             ))}
           </select>
 
-          <button
-            onClick={generate}
-            disabled={!ruleset || busyGen}
-            style={{
-              ...BUTTON_STYLE,
-              background: busyGen ? "rgba(255,255,255,0.08)" : BUTTON_STYLE.background,
-            }}
-            aria-busy={busyGen}
-          >
+          <button onClick={generate} disabled={!ruleset || busyGen}
+            style={{ ...BUTTON_STYLE, background: busyGen ? "rgba(255,255,255,0.08)" : BUTTON_STYLE.background }} aria-busy={busyGen}>
             {busyGen ? "Generating…" : "Generate"}
           </button>
         </div>
 
-        {!ruleset && (
-          <p style={{ opacity: 0.8 }}>
-            Load or fix the ruleset above to enable generation. The preview uses <code>/data/rulesetTemplate.json</code>.
-          </p>
-        )}
+        {/* Corridor / density knobs */}
+        <div style={{ display: "grid", gap: 10, gridTemplateColumns: "repeat(3, 1fr)", marginBottom: 12 }}>
+          <div>
+            <label style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 13, opacity: 0.85 }}>
+              <input type="checkbox" checked={mazeMode} onChange={e => setMazeMode(e.target.checked)} />
+              Corridor Maze Mode
+            </label>
+          </div>
+          <div>
+            <label htmlFor="openFrac" style={{ display: "block", fontSize: 13, opacity: 0.85, marginBottom: 6 }}>
+              Open Fraction (maze): {Math.round(openFrac * 100)}%
+            </label>
+            <input id="openFrac" type="range" min={0.2} max={0.8} step={0.05} value={openFrac} onChange={(e) => setOpenFrac(parseFloat(e.target.value))} style={{ width: "100%" }} />
+          </div>
+          <div>
+            <label htmlFor="wiggle" style={{ display: "block", fontSize: 13, opacity: 0.85, marginBottom: 6 }}>
+              Wiggle (maze): {Math.round(wiggle * 100)}%
+            </label>
+            <input id="wiggle" type="range" min={0} max={1} step={0.05} value={wiggle} onChange={(e) => setWiggle(parseFloat(e.target.value))} style={{ width: "100%" }} />
+          </div>
+        </div>
+
+        {/* General density knobs still work; when mazeMode off, blocked% applies */}
+        <div style={{ display: "grid", gap: 10, gridTemplateColumns: "repeat(3, 1fr)", marginBottom: 12 }}>
+          <div>
+            <label htmlFor="minEmpty" style={{ display: "block", fontSize: 13, opacity: 0.85, marginBottom: 6 }}>
+              Min Empty Fraction: {Math.round(minEmpty * 100)}%
+            </label>
+            <input id="minEmpty" type="range" min={0} max={1} step={0.05} value={minEmpty} onChange={(e) => setMinEmpty(parseFloat(e.target.value))} style={{ width: "100%" }} />
+          </div>
+          <div>
+            <label htmlFor="pathBias" style={{ display: "block", fontSize: 13, opacity: 0.85, marginBottom: 6 }}>
+              Path Empty Bias: {Math.round(pathBias * 100)}%
+            </label>
+            <input id="pathBias" type="range" min={0} max={1} step={0.05} value={pathBias} onChange={(e) => setPathBias(parseFloat(e.target.value))} style={{ width: "100%" }} />
+          </div>
+          <div>
+            <label htmlFor="blocked" style={{ display: "block", fontSize: 13, opacity: 0.85, marginBottom: 6 }}>
+              Blocked Fraction (non-maze): {Math.round(blocked * 100)}%
+            </label>
+            <input id="blocked" type="range" min={0} max={0.5} step={0.05} value={blocked} onChange={(e) => setBlocked(parseFloat(e.target.value))} style={{ width: "100%" }} />
+          </div>
+        </div>
+
+        {!ruleset && <p style={{ opacity: 0.8 }}>Load/fix the ruleset above to enable generation.</p>}
 
         {grid && (
           <div style={{ display: "grid", gap: 12 }}>
             <GridPreview grid={grid} />
             <Legend legend={legend} />
             <div style={{ fontSize: 13, opacity: 0.85 }}>
-              <strong>Entry</strong>: ({grid.entry.x},{grid.entry.y}) ·{" "}
-              <strong>Exit</strong>: ({grid.exit.x},{grid.exit.y})
-              {grid.boss ? (
-                <>
-                  {" "}
-                  · <strong>Boss</strong>: ({grid.boss.x},{grid.boss.y})
-                </>
-              ) : null}
+              <strong>Entry</strong>: ({grid.entry.x},{grid.entry.y}) · <strong>Exit</strong>: ({grid.exit.x},{grid.exit.y})
+              {grid.boss ? <> · <strong>Boss</strong>: ({grid.boss.x},{grid.boss.y})</> : null}
             </div>
           </div>
         )}
 
-        {!grid && ruleset && (
-          <p style={{ opacity: 0.8 }}>Set a seed, choose a floor, and click <em>Generate</em> to preview.</p>
-        )}
+        {!grid && ruleset && <p style={{ opacity: 0.8 }}>Choose seed/floor, toggle Maze Mode, tune, and <em>Generate</em>.</p>}
       </section>
     </div>
   );
 }
 
-/* ---------- UI bits ---------- */
-
+/* ---------- UI helpers ---------- */
 function Badge({ ok }: { ok: boolean }) {
   return (
     <span
       style={{
-        fontSize: 12,
-        padding: "4px 8px",
-        borderRadius: 999,
+        fontSize: 12, padding: "4px 8px", borderRadius: 999,
         background: ok ? "rgba(0,200,0,0.15)" : "rgba(255,80,80,0.15)",
         border: `1px solid ${ok ? "rgba(0,200,0,0.35)" : "rgba(255,80,80,0.35)"}`,
       }}
@@ -273,60 +253,25 @@ function Badge({ ok }: { ok: boolean }) {
 }
 
 function IssuesTable({ issues }: { issues: Issue[] }) {
-  if (!issues.length) {
-    return (
-      <div
-        style={{
-          padding: 12,
-          borderRadius: 8,
-          background: "rgba(0,0,0,0.2)",
-          border: "1px solid rgba(255,255,255,0.08)",
-        }}
-      >
-        <em style={{ opacity: 0.7 }}>No issues. Your ruleset DNA is clean.</em>
-      </div>
-    );
-  }
-
+  if (!issues.length) return (
+    <div style={{ padding: 12, borderRadius: 8, background: "rgba(0,0,0,0.2)", border: "1px solid rgba(255,255,255,0.08)" }}>
+      <em style={{ opacity: 0.7 }}>No issues. Your ruleset DNA is clean.</em>
+    </div>
+  );
   return (
-    <div
-      role="table"
-      aria-label="Validation issues"
-      style={{
-        borderRadius: 8,
-        overflow: "hidden",
-        border: "1px solid rgba(255,255,255,0.1)",
-      }}
-    >
-      <div
-        role="row"
-        style={{
-          display: "grid",
-          gridTemplateColumns: "120px 1fr",
-          padding: "10px 12px",
-          background: "rgba(255,255,255,0.06)",
-          fontWeight: 600,
-          fontSize: 14,
-        }}
-      >
-        <div>Level</div>
-        <div>Message</div>
+    <div role="table" aria-label="Validation issues"
+      style={{ borderRadius: 8, overflow: "hidden", border: "1px solid rgba(255,255,255,0.1)" }}>
+      <div role="row" style={{ display: "grid", gridTemplateColumns: "120px 1fr", padding: "10px 12px",
+        background: "rgba(255,255,255,0.06)", fontWeight: 600, fontSize: 14 }}>
+        <div>Level</div><div>Message</div>
       </div>
       {issues.map((i, idx) => (
-        <div
-          role="row"
-          key={idx}
+        <div role="row" key={idx}
           style={{
-            display: "grid",
-            gridTemplateColumns: "120px 1fr",
-            padding: "10px 12px",
-            borderTop: "1px solid rgba(255,255,255,0.08)",
-            background: "rgba(255,255,255,0.02)",
-          }}
-        >
-          <div style={{ color: i.level === "error" ? "salmon" : "khaki" }}>
-            {i.level.toUpperCase()}
-          </div>
+            display: "grid", gridTemplateColumns: "120px 1fr", padding: "10px 12px",
+            borderTop: "1px solid rgba(255,255,255,0.08)", background: "rgba(255,255,255,0.02)",
+          }}>
+          <div style={{ color: i.level === "error" ? "salmon" : "khaki" }}>{i.level.toUpperCase()}</div>
           <div style={{ whiteSpace: "pre-wrap" }}>{i.message}</div>
         </div>
       ))}
@@ -335,39 +280,22 @@ function IssuesTable({ issues }: { issues: Issue[] }) {
 }
 
 function GridPreview({ grid }: { grid: FloorGrid }) {
-  const size = 30; // px per cell for preview
+  const size = 30;
   return (
-    <div
-      role="grid"
-      aria-label="Floor grid preview"
+    <div role="grid" aria-label="Floor grid preview"
       style={{
         display: "grid",
         gridTemplateColumns: `repeat(${grid.width}, ${size}px)`,
         gridTemplateRows: `repeat(${grid.height}, ${size}px)`,
-        gap: 2,
-        background: "rgba(255,255,255,0.06)",
-        padding: 2,
-        borderRadius: 8,
-        width: "fit-content",
-      }}
-    >
+        gap: 2, background: "rgba(255,255,255,0.06)", padding: 2, borderRadius: 8, width: "fit-content",
+      }}>
       {grid.cells.map((c, i) => (
-        <div
-          key={i}
-          title={`${c.type} (${c.x},${c.y})`}
+        <div key={i} title={`${c.type} (${c.x},${c.y})`}
           style={{
-            width: size,
-            height: size,
-            background: COLOR_MAP[c.type],
-            borderRadius: 4,
-            display: "grid",
-            placeItems: "center",
-            fontSize: 11,
-            color: "rgba(0,0,0,0.8)",
-            userSelect: "none",
-          }}
-        >
-          {/* tiny labels for special tiles */}
+            width: size, height: size, background: COLOR_MAP[c.type],
+            borderRadius: 4, display: "grid", placeItems: "center",
+            fontSize: 11, color: "rgba(0,0,0,0.8)", userSelect: "none",
+          }}>
           {c.type === "entry" ? "E" : c.type === "exit" ? "X" : c.type === "boss" ? "B" : ""}
         </div>
       ))}
@@ -380,16 +308,7 @@ function Legend({ legend }: { legend: { key: RoomType; color: string }[] }) {
     <div style={{ display: "flex", flexWrap: "wrap", gap: 12, marginTop: 6 }}>
       {legend.map((l) => (
         <div key={l.key} style={{ display: "flex", alignItems: "center", gap: 8 }}>
-          <span
-            aria-hidden
-            style={{
-              width: 14,
-              height: 14,
-              borderRadius: 4,
-              background: l.color,
-              display: "inline-block",
-            }}
-          />
+          <span aria-hidden style={{ width: 14, height: 14, borderRadius: 4, background: l.color, display: "inline-block" }} />
           <span style={{ fontSize: 13, opacity: 0.85 }}>{l.key}</span>
         </div>
       ))}
