@@ -1,0 +1,21 @@
+{
+  "floor": 1,
+  "seed": 1130215123,
+  "isFinalBossFloor": false,
+  "options": {
+    "minEmptyFraction": 0.6,
+    "pathEmptyBias": 0.75,
+    "openFraction": 0.55,
+    "wiggle": 0.35,
+    "riverWidth": 1
+  },
+  "roomRatios": {
+    "combat": 0.2,
+    "trap": 0.05,
+    "loot": 0.15,
+    "out": 0,
+    "special": 0.05,
+    "boss": 0,
+    "empty": 0.55
+  }
+}

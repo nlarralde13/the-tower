@@ -1,18 +1,18 @@
-import PlayClient from "./PlayClient";
+// app/play/page.tsx (server component)
+import { generateFloorFromSeed } from "@/engine/generateFloor";
+import { generateFloorForRun } from "@/engine/runFactory";
+import ruleset from "@/public/data/rulesetTemplate.json"; // or fs read
 
-type SearchParams = {
-  tower?: string | string[];
-};
+export default async function PlayPage() {
+  const floorIdx = 1; // example
+  const floorTemplate = ruleset.floors.find((f: any) => f.floor === floorIdx);
 
-export default async function Play({
-  searchParams,
-}: {
-  // In Next 16, searchParams is async in Server Components
-  searchParams: Promise<SearchParams>;
-}) {
-  const sp = await searchParams;
-  const tower =
-    (Array.isArray(sp?.tower) ? sp?.tower[0] : sp?.tower) ?? "tower-1";
+  const grid = generateFloorForRun(
+    floorTemplate,
+    { /* your FloorConfig defaults */ },
+    /* optional fixedSeed */ undefined,
+    generateFloorFromSeed
+  );
 
-  return <PlayClient towerId={tower} />;
+  return <pre>{JSON.stringify(grid, null, 2)}</pre>;
 }

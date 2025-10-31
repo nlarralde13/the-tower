@@ -4,11 +4,11 @@
   "description": "A five-floor training tower. Rumors say a guardian awaits on the top floor.",
   "floor_count": 5,
   "floors": {
-    "1": { "difficulty": 1, "room_ratios": { "combat": 0.20, "trap": 0.05, "loot": 0.15, "out": 0.00, "special": 0.05, "empty": 0.55 } },
-    "2": { "difficulty": 2, "room_ratios": { "combat": 0.20, "trap": 0.05, "loot": 0.20, "out": 0.00, "special": 0.05, "empty": 0.50 } },
-    "3": { "difficulty": 3, "room_ratios": { "combat": 0.22, "trap": 0.05, "loot": 0.18, "out": 0.00, "special": 0.05, "empty": 0.50 } },
-    "4": { "difficulty": 4, "room_ratios": { "combat": 0.24, "trap": 0.05, "loot": 0.16, "out": 0.00, "special": 0.05, "empty": 0.50 } },
-    "5": { "difficulty": 5, "room_ratios": { "combat": 0.28, "trap": 0.05, "loot": 0.22, "out": 0.00, "special": 0.15, "empty": 0.30 }, "boss_room": true }
+    "1": { "difficulty": 1, "room_ratios": { "combat": 0.20, "trap": 0.05, "loot": 0.15, "out": 0.00, "special": 0.05, "boss": 0.00, "empty": 0.55 } },
+    "2": { "difficulty": 2, "room_ratios": { "combat": 0.20, "trap": 0.05, "loot": 0.20, "out": 0.00, "special": 0.05, "boss": 0.00, "empty": 0.50 } },
+    "3": { "difficulty": 3, "room_ratios": { "combat": 0.22, "trap": 0.05, "loot": 0.18, "out": 0.00, "special": 0.05, "boss": 0.00, "empty": 0.50 } },
+    "4": { "difficulty": 4, "room_ratios": { "combat": 0.24, "trap": 0.05, "loot": 0.16, "out": 0.00, "special": 0.05, "boss": 0.00, "empty": 0.50 } },
+    "5": { "difficulty": 5, "room_ratios": { "combat": 0.28, "trap": 0.05, "loot": 0.22, "out": 0.00, "special": 0.15, "boss": 0.00, "empty": 0.30 }, "boss_room": true }
   },
 
   "mutators": [],

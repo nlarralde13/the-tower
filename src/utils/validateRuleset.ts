@@ -4,7 +4,15 @@ import type { Ruleset, FloorConfig, RoomRatios } from "@/types/tower";
 type ValidationIssue = { level: "error" | "warn"; message: string };
 export type ValidationReport = { ok: boolean; issues: ValidationIssue[]; ruleset?: Ruleset };
 
-const RATIO_KEYS: Array<keyof RoomRatios> = ["combat", "trap", "loot", "out", "special", "empty"];
+const RATIO_KEYS: Array<keyof RoomRatios> = [
+  "combat",
+  "trap",
+  "loot",
+  "out",
+  "special",
+  "boss",
+  "empty",
+];
 const TOLERANCE = 0.01;
 
 export async function validateRuleset(

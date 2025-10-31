@@ -1,7 +1,7 @@
 // /src/engine/generateFloor.ts
-import type { FloorConfig, FloorGrid, RoomType } from "@/types/tower";
+import type { FloorConfig, FloorGrid, RoomType, FloorSeed } from "@/types/tower";
 import type { RNG } from "./rng";
-import { shuffleInPlace } from "./rng";
+import { mulberry32, shuffleInPlace } from "./rng";
 import { neighbors4, randomBorderCell, type Point } from "./path";
 
 const W = 8;
@@ -80,6 +80,31 @@ type RiverCandidate = {
   score: number;
   side: "left" | "right" | "center";
 };
+
+function bfsDistanceField(sources: Point[], w: number, h: number) {
+  const dist = new Array(w * h).fill(Infinity) as number[];
+  const q: Point[] = [];
+  for (const s of sources) {
+    const i = idx(s.x, s.y);
+    if (dist[i] !== 0) {
+      dist[i] = 0;
+      q.push({ x: s.x, y: s.y });
+    }
+  }
+  let head = 0;
+  while (head < q.length) {
+    const cur = q[head++];
+    const base = dist[idx(cur.x, cur.y)];
+    for (const nb of neighbors4(cur, w, h)) {
+      const ni = idx(nb.x, nb.y);
+      if (dist[ni] > base + 1) {
+        dist[ni] = base + 1;
+        q.push(nb);
+      }
+    }
+  }
+  return dist;
+}
 
 function buildRiverPath(rng: RNG, start: Point, goal: Point, wiggle: number): Point[] {
   const startKey = key(start.x, start.y);
@@ -263,16 +288,27 @@ export function generateFloor(
     minEmptyFraction?: number;
     pathEmptyBias?: number;
     openFraction?: number;
+    blockedFraction?: number; // backwards compat: if provided, overrides openFraction as 1 - blocked
     wiggle?: number;
-    riverWidth?: number;
+    riverWidth?: number; // base corridor thickness (tiles beyond path)
+    bandPadding?: number; // additive control for corridor width (positive=wider, negative=tighter)
+    mazeMode?: string | boolean; // accepted for compatibility; currently unused
     roomRatiosOverride?: RoomRatioOverride;
   }
 ): FloorGrid {
   const minEmptyFraction = clamp(opts?.minEmptyFraction ?? 0.5, 0, 0.95);
   const pathEmptyBias = clamp(opts?.pathEmptyBias ?? 0.7, 0, 1);
-  const openFraction = clamp(opts?.openFraction ?? 0.58, 0.3, 0.95);
+  const openFracOpt =
+    typeof opts?.openFraction === "number"
+      ? opts.openFraction
+      : typeof opts?.blockedFraction === "number"
+      ? 1 - opts.blockedFraction
+      : 0.58;
+  const openFraction = clamp(openFracOpt, 0.3, 0.95);
   const wiggle = clamp(opts?.wiggle ?? 0.35, 0, 1);
-  const riverRadius = Math.max(0, Math.round(opts?.riverWidth ?? 1));
+  const baseWidth = Math.round(opts?.riverWidth ?? 1);
+  const padding = Math.round(opts?.bandPadding ?? 0);
+  const riverRadius = Math.max(0, baseWidth + padding);
 
   const desiredRatios = {
     combat: safeWeight(opts?.roomRatiosOverride?.combat ?? config.room_ratios.combat),
@@ -280,6 +316,7 @@ export function generateFloor(
     loot: safeWeight(opts?.roomRatiosOverride?.loot ?? config.room_ratios.loot),
     out: safeWeight(opts?.roomRatiosOverride?.out ?? config.room_ratios.out),
     special: safeWeight(opts?.roomRatiosOverride?.special ?? config.room_ratios.special),
+    boss: safeWeight(opts?.roomRatiosOverride?.boss ?? (config.room_ratios as any).boss),
     empty: safeWeight(opts?.roomRatiosOverride?.empty ?? config.room_ratios.empty),
   };
 
@@ -299,19 +336,48 @@ export function generateFloor(
     return { x, y, type: "empty" as RoomType };
   });
 
-  const entry = randomBorderCell(rng, W, H);
-  let exit = randomBorderCell(rng, W, H);
-  let safety = 0;
-  while ((exit.x === entry.x && exit.y === entry.y) || md(entry, exit) < 6) {
+  // Entry/Exit rules: special handling for floor 1; otherwise random borders with reasonable separation
+  let entry: Point;
+  let exit: Point;
+  if (floorNumber === 1) {
+    // Entrance fixed near bottom center; Exit anywhere on top two rows
+    const startX = rng() < 0.5 ? 3 : 4;
+    entry = { x: startX, y: H - 1 };
+    exit = { x: Math.floor(rng() * W), y: Math.floor(rng() * Math.min(2, H)) };
+  } else {
+    entry = randomBorderCell(rng, W, H);
     exit = randomBorderCell(rng, W, H);
-    if (++safety > 12) break;
+    let safety = 0;
+    while ((exit.x === entry.x && exit.y === entry.y) || md(entry, exit) < 6) {
+      exit = randomBorderCell(rng, W, H);
+      if (++safety > 12) break;
+    }
   }
 
   cells[idx(entry.x, entry.y)].type = "entry";
   cells[idx(exit.x, exit.y)].type = "exit";
 
+  // Carve a guaranteed entry->exit path, then compute distance field from it
   const riverPath = buildRiverPath(rng, entry, exit, wiggle);
-  const corridor = expandRiver(riverPath, riverRadius);
+  const distField = bfsDistanceField(riverPath, W, H);
+  // Base corridor: bands within riverRadius of the path
+  const corridor: { set: Set<string>; cells: Point[] } = (() => {
+    const set = new Set<string>();
+    const cells: Point[] = [];
+    for (let y = 0; y < H; y++) {
+      for (let x = 0; x < W; x++) {
+        const d = distField[idx(x, y)];
+        if (d <= riverRadius) {
+          const k = key(x, y);
+          if (!set.has(k)) {
+            set.add(k);
+            cells.push({ x, y });
+          }
+        }
+      }
+    }
+    return { set, cells };
+  })();
 
   let bossPos: Point | undefined;
   if (isFinalBossFloor) {
@@ -328,104 +394,42 @@ export function generateFloor(
   const reservedKeys = new Set<string>([key(entry.x, entry.y), key(exit.x, exit.y)]);
   if (bossPos) reservedKeys.add(key(bossPos.x, bossPos.y));
 
-  const targetOpen = Math.max(corridor.set.size, Math.round(W * H * openFraction));
-  const blockable: RiverCandidate[] = [];
-  const safeRing = Math.max(1, riverRadius);
+  const totalTiles = W * H;
+  const baseOpen = corridor.set.size;
+  const targetOpen = Math.max(baseOpen, Math.round(totalTiles * openFraction));
 
+  // Pre-open: path + corridor bands already in 'corridor.set'. We'll add more open tiles outward by distance.
+  // Gather remaining candidates (excluding reserved).
+  const candidates: Array<{ x: number; y: number; d: number; noise: number }> = [];
   for (let y = 0; y < H; y++) {
     for (let x = 0; x < W; x++) {
       const k = key(x, y);
-      if (reservedKeys.has(k) || corridor.set.has(k)) continue;
-      const point = { x, y };
-      if (md(point, entry) <= safeRing || md(point, exit) <= safeRing) continue;
-      const side = classifySide(entry, exit, point);
-      const dist = distanceToSet(point, corridor.cells);
-      const edgeDist = Math.min(x, W - 1 - x, y, H - 1 - y);
-      const edgeBoost = edgeDist <= 0 ? 0.6 : 0.18 / (edgeDist + 1);
-      const jitter = rng() * 0.3;
-      const score = dist + edgeBoost + jitter;
-      blockable.push({ key: k, cell: point, score, side });
+      if (reservedKeys.has(k)) continue;
+      if (corridor.set.has(k)) continue; // already open base corridor
+      const d = distField[idx(x, y)];
+      const noise = rng(); // deterministic given seed; used for stable tie-breaks inside bands
+      candidates.push({ x, y, d, noise });
     }
   }
+  // Sort by distance from path ascending; tie-break with small noise to avoid axial bias
+  candidates.sort((a, b) => a.d - b.d || a.noise - b.noise);
 
-  const toBlock = Math.min(blockable.length, Math.max(0, W * H - targetOpen));
+  const needToOpen = Math.max(0, targetOpen - baseOpen);
+  for (let i = 0; i < needToOpen && i < candidates.length; i++) {
+    const c = candidates[i];
+    const k = key(c.x, c.y);
+    corridor.set.add(k);
+    corridor.cells.push({ x: c.x, y: c.y });
+  }
 
-  if (toBlock > 0) {
-    const buckets: Record<"left" | "right" | "center", RiverCandidate[]> = {
-      left: [],
-      right: [],
-      center: [],
-    };
-    for (const c of blockable) buckets[c.side].push(c);
-    (Object.keys(buckets) as Array<"left" | "right" | "center">).forEach((side) => {
-      buckets[side].sort((a, b) => b.score - a.score);
-    });
-
-    const weightLeft = buckets.left.length || (buckets.right.length ? 0.5 : 0);
-    const weightRight = buckets.right.length || (buckets.left.length ? 0.5 : 0);
-    const allocation = apportion(toBlock, { left: weightLeft, right: weightRight });
-    let leftNeed = Math.min(buckets.left.length, allocation.left ?? 0);
-    let rightNeed = Math.min(buckets.right.length, allocation.right ?? 0);
-
-    if (toBlock >= 2 && buckets.left.length > 0 && buckets.right.length > 0) {
-      leftNeed = Math.max(1, leftNeed);
-      rightNeed = Math.max(1, rightNeed);
-      if (leftNeed + rightNeed > toBlock) {
-        if (leftNeed > rightNeed) leftNeed -= 1;
-        else rightNeed -= 1;
+  // All non-corridor, non-reserved tiles become blocked
+  for (let y = 0; y < H; y++) {
+    for (let x = 0; x < W; x++) {
+      const k = key(x, y);
+      if (reservedKeys.has(k)) continue;
+      if (!corridor.set.has(k)) {
+        cells[idx(x, y)].type = "blocked";
       }
-    }
-
-    let remaining = toBlock - (leftNeed + rightNeed);
-    let leftIndex = leftNeed;
-    let rightIndex = rightNeed;
-    while (remaining > 0 && (leftIndex < buckets.left.length || rightIndex < buckets.right.length)) {
-      if (leftIndex < buckets.left.length && (leftIndex - leftNeed <= rightIndex - rightNeed || rightIndex >= buckets.right.length)) {
-        leftIndex += 1;
-        leftNeed += 1;
-      } else if (rightIndex < buckets.right.length) {
-        rightIndex += 1;
-        rightNeed += 1;
-      }
-      remaining = toBlock - (leftNeed + rightNeed);
-      if (remaining <= 0) break;
-    }
-
-    const blockedKeys = new Set<string>();
-    for (let i = 0; i < leftNeed; i++) blockedKeys.add(buckets.left[i].key);
-    for (let i = 0; i < rightNeed; i++) blockedKeys.add(buckets.right[i].key);
-
-    let leftCount = leftNeed;
-    let rightCount = rightNeed;
-    remaining = toBlock - blockedKeys.size;
-
-    let centerIndex = 0;
-    while (remaining > 0 && centerIndex < buckets.center.length) {
-      const cand = buckets.center[centerIndex++];
-      blockedKeys.add(cand.key);
-      if (leftCount <= rightCount) leftCount += 1;
-      else rightCount += 1;
-      remaining = toBlock - blockedKeys.size;
-    }
-
-    leftIndex = leftNeed;
-    rightIndex = rightNeed;
-    while (remaining > 0 && (leftIndex < buckets.left.length || rightIndex < buckets.right.length)) {
-      if (leftIndex < buckets.left.length && (leftCount <= rightCount || rightIndex >= buckets.right.length)) {
-        blockedKeys.add(buckets.left[leftIndex++].key);
-        leftCount += 1;
-      } else if (rightIndex < buckets.right.length) {
-        blockedKeys.add(buckets.right[rightIndex++].key);
-        rightCount += 1;
-      } else {
-        break;
-      }
-      remaining = toBlock - blockedKeys.size;
-    }
-
-    for (const k of blockedKeys) {
-      const [bx, by] = k.split(",").map(Number);
-      cells[idx(bx, by)].type = "blocked";
     }
   }
 
@@ -446,10 +450,10 @@ export function generateFloor(
     loot: desiredRatios.loot,
     out: desiredRatios.out,
     special: desiredRatios.special,
+    boss: desiredRatios.boss,
     empty: desiredRatios.empty,
     entry: 0,
     exit: 0,
-    boss: 0,
     blocked: 0,
   };
 
@@ -460,10 +464,10 @@ export function generateFloor(
     loot: targetCounts.loot ?? 0,
     out: targetCounts.out ?? 0,
     special: targetCounts.special ?? 0,
+    boss: Math.max(0, (targetCounts.boss ?? 0) - (bossPos ? 1 : 0)),
     empty: Math.max(0, (targetCounts.empty ?? 0) - lockedEmpty.size),
     entry: 0,
     exit: 0,
-    boss: 0,
     blocked: 0,
   };
 
@@ -494,4 +498,19 @@ export function generateFloor(
   }
 
   return { width: W, height: H, cells, entry, exit, boss: bossPos };
+}
+
+export function generateFloorFromSeed(seed: FloorSeed, baseConfig: FloorConfig): FloorGrid {
+  const rng = mulberry32(seed.seed >>> 0);
+  const opts = {
+    minEmptyFraction: seed.options.minEmptyFraction,
+    pathEmptyBias: seed.options.pathEmptyBias,
+    openFraction: seed.options.openFraction,
+    blockedFraction: seed.options.blockedFraction,
+    wiggle: seed.options.wiggle,
+    riverWidth: seed.options.riverWidth,
+    bandPadding: seed.options.bandPadding,
+    roomRatiosOverride: seed.roomRatios,
+  } as const;
+  return generateFloor(rng, seed.floor, baseConfig, !!seed.isFinalBossFloor, opts);
 }

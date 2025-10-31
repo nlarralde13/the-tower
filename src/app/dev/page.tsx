@@ -2,14 +2,14 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { validateRuleset } from "@/utils/validateRuleset";
-import type { Ruleset, FloorGrid, RoomType, FloorConfig } from "@/types/tower";
+import type { Ruleset, FloorGrid, RoomType, FloorConfig, FloorSeed } from "@/types/tower";
 import { mulberry32, type RNG } from "@/engine/rng";
-import { generateFloor } from "@/engine/generateFloor";
+import { generateFloor, generateFloorFromSeed } from "@/engine/generateFloor";
 
 type Issue = { level: "error" | "warn"; message: string };
 type Report = { ok: boolean; issues: Issue[] };
 
-type RatioKey = "combat" | "trap" | "loot" | "out" | "special" | "empty";
+type RatioKey = "combat" | "trap" | "loot" | "out" | "special" | "boss" | "empty";
 
 const RATIO_LABELS: Record<RatioKey, string> = {
   combat: "Combat",
@@ -17,6 +17,7 @@ const RATIO_LABELS: Record<RatioKey, string> = {
   loot: "Treasure",
   out: "Out",
   special: "Special",
+  boss: "Boss",
   empty: "Empty",
 };
 
@@ -83,6 +84,7 @@ export default function DevPage() {
     loot: 0.2,
     out: 0.15,
     special: 0.15,
+    boss: 0,
     empty: 0.2,
   });
 
@@ -111,6 +113,7 @@ export default function DevPage() {
       loot: cfg.room_ratios.loot ?? 0,
       out: cfg.room_ratios.out ?? 0,
       special: cfg.room_ratios.special ?? 0,
+      boss: (cfg.room_ratios as any).boss ?? 0,
       empty: cfg.room_ratios.empty ?? 0,
     };
     const sum = Object.values(base).reduce((a, b) => a + (b || 0), 0);
@@ -122,6 +125,7 @@ export default function DevPage() {
           loot: 0.2,
           out: 0.15,
           special: 0.15,
+          boss: 0,
           empty: 0.2,
         });
       } else {
@@ -150,6 +154,7 @@ export default function DevPage() {
       loot: 0,
       out: 0,
       special: 0,
+      boss: 0,
       empty: 0,
     };
     (Object.keys(out) as RatioKey[]).forEach((key) => {
@@ -195,6 +200,104 @@ export default function DevPage() {
     });
     setGrid(f);
     setBusyGen(false);
+  }
+
+  function exportSeed() {
+    if (!ruleset) return;
+    const s = parseInt(seed || "0", 10);
+    const floorKey = String(floorIdx);
+    const cfg: FloorConfig | undefined = ruleset.floors?.[floorKey];
+    if (!cfg) return;
+    const isFinal =
+      floorIdx === ruleset.floor_count &&
+      !!ruleset.floors?.[floorKey]?.boss_room &&
+      !!ruleset.rules?.exit_requires_boss_clear;
+
+    const seedObj: FloorSeed = {
+      floor: floorIdx,
+      seed: Number.isFinite(s) ? s : 0,
+      isFinalBossFloor: isFinal,
+      options: {
+        minEmptyFraction: minEmpty,
+        pathEmptyBias: pathBias,
+        openFraction: openFrac,
+        wiggle,
+        riverWidth,
+      },
+      roomRatios: {
+        combat: roomRatios.combat ?? 0,
+        trap: roomRatios.trap ?? 0,
+        loot: roomRatios.loot ?? 0,
+        out: roomRatios.out ?? 0,
+        special: roomRatios.special ?? 0,
+        boss: roomRatios.boss ?? 0,
+        empty: roomRatios.empty ?? 0,
+      },
+    };
+    const blob = new Blob([JSON.stringify(seedObj, null, 2)], { type: "application/json" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `floor-seed-f${floorIdx}-s${seed}.json`;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    URL.revokeObjectURL(url);
+  }
+
+  function importSeed() {
+    if (!ruleset) return;
+    const input = document.createElement("input");
+    input.type = "file";
+    input.accept = "application/json";
+    input.onchange = async () => {
+      const file = input.files?.[0];
+      if (!file) return;
+      try {
+        const text = await file.text();
+        const data = JSON.parse(text) as FloorSeed;
+        if (!data || typeof data.floor !== "number" || typeof data.seed !== "number") {
+          alert("Invalid seed file: missing floor/seed");
+          return;
+        }
+        const floorKey = String(data.floor);
+        const cfg: FloorConfig | undefined = ruleset.floors?.[floorKey];
+        if (!cfg) {
+          alert(`No floor config found for floor ${data.floor}`);
+          return;
+        }
+        // Reflect into UI controls where possible
+        setFloorIdx(data.floor);
+        setSeed(String(data.seed));
+        if (data.options) {
+          if (typeof data.options.minEmptyFraction === "number") setMinEmpty(data.options.minEmptyFraction);
+          if (typeof data.options.pathEmptyBias === "number") setPathBias(data.options.pathEmptyBias);
+          if (typeof data.options.openFraction === "number") setOpenFrac(data.options.openFraction);
+          if (typeof data.options.wiggle === "number") setWiggle(data.options.wiggle);
+          if (typeof data.options.riverWidth === "number") setRiverWidth(data.options.riverWidth);
+        }
+        if (data.roomRatios) {
+          setRoomRatios((prev) => ({
+            ...prev,
+            combat: data.roomRatios.combat ?? prev.combat,
+            trap: data.roomRatios.trap ?? prev.trap,
+            loot: data.roomRatios.loot ?? prev.loot,
+            out: data.roomRatios.out ?? prev.out,
+            special: data.roomRatios.special ?? prev.special,
+            boss: (data.roomRatios as any).boss ?? prev.boss,
+            empty: data.roomRatios.empty ?? prev.empty,
+          }));
+        }
+        setBusyGen(true);
+        const grid = generateFloorFromSeed(data, cfg);
+        setGrid(grid);
+        setBusyGen(false);
+      } catch (e) {
+        console.error(e);
+        alert("Failed to import seed JSON");
+      }
+    };
+    input.click();
   }
 
   return (
@@ -267,6 +370,17 @@ export default function DevPage() {
             style={{ ...INPUT_STYLE, maxWidth: 200 }}
             spellCheck={false}
           />
+          <button
+            onClick={() => {
+              // 32-bit unsigned random integer
+              const s = Math.floor(Math.random() * 0xffffffff);
+              setSeed(String(s));
+            }}
+            style={{ ...BUTTON_STYLE }}
+            title="Randomize seed"
+          >
+            Random Seed
+          </button>
 
           <label htmlFor="floor" style={{ fontSize: 14, opacity: 0.85, minWidth: 80, marginLeft: 8 }}>
             Floor
@@ -294,6 +408,22 @@ export default function DevPage() {
             aria-busy={busyGen}
           >
             {busyGen ? "Generating…" : "Generate"}
+          </button>
+          <button
+            onClick={exportSeed}
+            disabled={!ruleset}
+            style={{ ...BUTTON_STYLE }}
+            title="Download a JSON file capturing the current generation knobs"
+          >
+            Export Seed JSON
+          </button>
+          <button
+            onClick={importSeed}
+            disabled={!ruleset}
+            style={{ ...BUTTON_STYLE }}
+            title="Load a JSON seed and generate immediately"
+          >
+            Import Seed JSON
           </button>
         </div>
 
@@ -382,11 +512,28 @@ export default function DevPage() {
 
         {/* Room ratios */}
         <div style={{ marginBottom: 12 }}>
-          <header style={{ marginBottom: 8, display: "flex", justifyContent: "space-between", alignItems: "baseline" }}>
+          <header style={{ marginBottom: 8, display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8 }}>
             <h3 style={{ margin: 0, fontSize: 16 }}>Room Density Weights</h3>
-            <small style={{ opacity: 0.7 }}>
-              Normalized total: {Math.round(ratioSum > 0 ? 100 : 0)}%
-            </small>
+            <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+              <small style={{ opacity: 0.7 }}>Normalized total: {Math.round(ratioSum > 0 ? 100 : 0)}%</small>
+              <button
+                onClick={() => {
+                  // Dirichlet-like random weights across all ratio keys
+                  const keys = Object.keys(RATIO_LABELS) as RatioKey[];
+                  const draws = keys.map(() => -Math.log(Math.max(Number.EPSILON, Math.random())));
+                  const total = draws.reduce((a, b) => a + b, 0) || 1;
+                  const next: Record<RatioKey, number> = {} as any;
+                  keys.forEach((k, i) => {
+                    next[k] = draws[i] / total;
+                  });
+                  setRoomRatios(next);
+                }}
+                style={{ ...BUTTON_STYLE }}
+                title="Randomize density weights"
+              >
+                Random Weights
+              </button>
+            </div>
           </header>
           <p style={{ marginTop: 0, marginBottom: 12, fontSize: 13, opacity: 0.8 }}>
             Adjust relative weights per room type. Values are automatically normalized when generating a floor.

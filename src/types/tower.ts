@@ -7,6 +7,8 @@ export interface RoomRatios {
   loot: number;
   out: number;
   special: number;
+  /** Optional proportion of boss rooms (mini-boss density). */
+  boss?: number;
   /** Optional proportion of intentionally empty rooms. */
   empty?: number;
 }
@@ -67,4 +69,22 @@ export interface FloorGrid {
   entry: { x: number; y: number };
   exit: { x: number; y: number };
   boss?: { x: number; y: number };
+}
+
+// Serialized seed used to reproduce generation for a specific floor.
+export interface FloorSeed {
+  floor: number;
+  seed: number;
+  isFinalBossFloor?: boolean;
+  options: {
+    minEmptyFraction: number;
+    pathEmptyBias: number;
+    openFraction?: number;
+    blockedFraction?: number;
+    wiggle: number;
+    riverWidth: number;
+    bandPadding?: number;
+  };
+  roomRatios: Required<Pick<RoomRatios, "combat" | "trap" | "loot" | "out" | "special">> &
+    Partial<Pick<RoomRatios, "empty" | "boss">>;
 }
