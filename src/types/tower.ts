@@ -37,3 +37,21 @@ export interface Ruleset {
   scaling: ScalingRules;
   rules: TowerRules;
 }
+// --- Grid & generation types ---
+
+export type RoomType = "entry" | "exit" | "boss" | "combat" | "trap" | "loot" | "out" | "special" | "empty";
+
+export interface Cell {
+  x: number;
+  y: number;
+  type: RoomType;
+}
+
+export interface FloorGrid {
+  width: number;   // always 8
+  height: number;  // always 8
+  cells: Cell[];   // flat list, index = y * width + x
+  entry: { x: number; y: number };
+  exit: { x: number; y: number };
+  boss?: { x: number; y: number }; // only on last floor
+}
