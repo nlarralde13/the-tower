@@ -33,7 +33,7 @@ export function ascendFloor() {
 }
 
 export function getSnapshot() { return snap; }
-export function tick(_dt: number) {}
+export function tick(): void {}
 
 export function describeCurrentRoom(): string {
   const r = currentRoom();

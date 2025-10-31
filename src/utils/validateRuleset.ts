@@ -37,13 +37,14 @@ export async function validateRuleset(
       if (!f?.room_ratios) {
         issues.push({ level: "error", message: `Floor ${k}: missing "room_ratios".` });
       } else {
+        const ratios = f.room_ratios as Record<string, unknown>;
         for (const key of RATIO_KEYS) {
-          const v = (f.room_ratios as any)[key];
-          if (v !== undefined) {
-            if (typeof v !== "number" || Number.isNaN(v)) {
+          const raw = ratios[key];
+          if (raw !== undefined) {
+            if (typeof raw !== "number" || Number.isNaN(raw)) {
               issues.push({ level: "error", message: `Floor ${k}: room_ratios.${key} must be a number.` });
-            } else if (v < 0 || v > 1) {
-              issues.push({ level: "error", message: `Floor ${k}: room_ratios.${key} out of range [0..1]: ${v}` });
+            } else if (raw < 0 || raw > 1) {
+              issues.push({ level: "error", message: `Floor ${k}: room_ratios.${key} out of range [0..1]: ${raw}` });
             }
           }
         }
@@ -52,7 +53,10 @@ export async function validateRuleset(
             issues.push({ level: "warn", message: `Floor ${k}: unknown room_ratios key "${extra}".` });
           }
         }
-        const sum = RATIO_KEYS.reduce((a, key) => a + ((f.room_ratios as any)[key] ?? 0), 0);
+        const sum = RATIO_KEYS.reduce((total, key) => {
+          const raw = ratios[key];
+          return total + (typeof raw === "number" ? raw : 0);
+        }, 0);
         if (Math.abs(sum - 1) > TOLERANCE) {
           issues.push({
             level: "warn",
@@ -76,8 +80,8 @@ export async function validateRuleset(
     const ok = issues.every(i => i.level !== "error");
     logValidationSummary(json.display_name ?? json.tower_id, ok, issues);
     return { ok, issues, ruleset: json };
-  } catch (err: any) {
-    const msg = err?.message || String(err);
+  } catch (err: unknown) {
+    const msg = err instanceof Error ? err.message : String(err);
     const failure: ValidationReport = { ok: false, issues: [{ level: "error", message: msg }] };
     logValidationSummary("ruleset", false, failure.issues);
     return failure;

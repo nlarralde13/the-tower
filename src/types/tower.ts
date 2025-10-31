@@ -35,7 +35,7 @@ export interface Ruleset {
   description: string;
   floor_count: number;
   floors: Record<string, FloorConfig>;
-  mutators: any[];
+  mutators: unknown[];
   scaling: ScalingRules;
   rules: TowerRules;
 }

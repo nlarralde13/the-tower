@@ -1,4 +1,3 @@
-/* eslint-disable no-bitwise */
 // Tiny, deterministic, seedable RNG. Returns a float in [0, 1).
 
 export type RNG = () => number;

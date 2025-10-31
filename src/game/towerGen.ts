@@ -1,4 +1,3 @@
-/* eslint-disable no-bitwise */
 import type { FloorMap, Room, RoomType } from "./types";
 import { createRNG, mixSeed } from "./rng";
 
