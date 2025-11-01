@@ -1,4 +1,4 @@
-﻿// components/TopBar.tsx
+// components/TopBar.tsx
 "use client";
 
 import { useEffect, useRef, useState } from "react";
@@ -14,6 +14,7 @@ type PlayerStats = {
 
 type TopBarProps = {
   playerStats?: PlayerStats;
+  // Optional: show signed-in state or avatar later if you want
   signedIn?: boolean;
   displayName?: string;
 };
@@ -76,21 +77,21 @@ export default function TopBar({
         <div className={styles.hud} role="status" aria-live="polite">
           <Meter
             label="HP"
-            icon="?"
+            icon="❤️"
             percent={hpPct}
             text={`${playerStats.hp.current}/${playerStats.hp.max}`}
             colorVar="--hp"
           />
           <Meter
             label="MP"
-            icon="??"
+            icon="🔵"
             percent={mpPct}
             text={`${playerStats.mp.current}/${playerStats.mp.max}`}
             colorVar="--mp"
           />
           <Meter
             label="STA"
-            icon="?"
+            icon="⚡"
             percent={stPct}
             text={`${playerStats.stamina.current}/${playerStats.stamina.max}`}
             colorVar="--st"
@@ -116,31 +117,31 @@ export default function TopBar({
         aria-hidden={!open}
       >
         <div className={styles.drawerHeader}>
-          <div className={styles.brandDot} aria-hidden="true">TT</div>
+          <div className={styles.brandDot} aria-hidden="true">⎈</div>
           <div className={styles.brandCopy}>
             <div className={styles.brandTitle}>The Tower</div>
             <div className={styles.brandSubtitle}>
-              {signedIn ? `Signed in${displayName ? ` – ${displayName}` : ""}` : "Guest"}
+              {signedIn ? `Signed in${displayName ? ` • ${displayName}` : ""}` : "Guest"}
             </div>
           </div>
         </div>
 
         <ul className={styles.menuList}>
-          <li><Link href="/" className={styles.menuLink} onClick={() => setOpen(false)}>?? Home</Link></li>
-          <li><Link href="/climb" className={styles.menuLink} onClick={() => setOpen(false)}>?? Climb the Tower</Link></li>
-          <li><Link href="/traders" className={styles.menuLink} onClick={() => setOpen(false)}>?? Traders’ Guild</Link></li>
-          <li><Link href="/crafters" className={styles.menuLink} onClick={() => setOpen(false)}>?? Crafters’ Guild</Link></li>
-          <li><Link href="/inn" className={styles.menuLink} onClick={() => setOpen(false)}>?? The Inn</Link></li>
-          <li><Link href="/training" className={styles.menuLink} onClick={() => setOpen(false)}>?? Training Grounds</Link></li>
+          <li><Link href="/" className={styles.menuLink} onClick={() => setOpen(false)}>🏰 Home</Link></li>
+          <li><Link href="/climb" className={styles.menuLink} onClick={() => setOpen(false)}>🧗 Climb the Tower</Link></li>
+          <li><Link href="/traders" className={styles.menuLink} onClick={() => setOpen(false)}>🪙 Traders’ Guild</Link></li>
+          <li><Link href="/crafters" className={styles.menuLink} onClick={() => setOpen(false)}>⚒️ Crafters’ Guild</Link></li>
+          <li><Link href="/inn" className={styles.menuLink} onClick={() => setOpen(false)}>🍺 The Inn</Link></li>
+          <li><Link href="/training" className={styles.menuLink} onClick={() => setOpen(false)}>🏹 Training Grounds</Link></li>
           <li className={styles.rule} aria-hidden="true" />
-          <li><Link href="/settings" className={styles.menuLink} onClick={() => setOpen(false)}>?? Settings</Link></li>
+          <li><Link href="/settings" className={styles.menuLink} onClick={() => setOpen(false)}>⚙️ Settings</Link></li>
           <li>
             <Link
               href={signedIn ? "/api/auth/signout" : "/api/auth/signin"}
               className={styles.menuLink}
               onClick={() => setOpen(false)}
             >
-              {signedIn ? "Sign out" : "Sign in"}
+              {signedIn ? "🔓 Sign out" : "🔐 Sign in"}
             </Link>
           </li>
         </ul>
@@ -172,6 +173,8 @@ function Meter({
         <div className={styles.meterFill} style={{ width: `${percent}%` }} />
         <div className={styles.meterText}>{text}</div>
       </div>
+      
     </div>
   );
 }
+

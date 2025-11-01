@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import PageSurface from "@/components/PageSurface";
@@ -7,8 +7,6 @@ import ThumbBar from "@/components/ThumbBar";
 import { useRunStore } from "@/store/runStore";
 import { chooseFlavor, exitsFlavor } from "@/game/flavor";
 import { useRouter, useSearchParams } from "next/navigation";
-import Link from "next/link";
-import { use } from "react";
 
 export default function PlayPage() {
   const router = useRouter();
@@ -26,7 +24,9 @@ export default function PlayPage() {
   const showOverlay = useRunStore((s) => s.dev.gridOverlay);
 
   const [actionMsg, setActionMsg] = useState<string>("");
-  const [mapOpen, setMapOpen] = useState(false);
+  // Mobile slide-in drawers
+  const [leftOpen, setLeftOpen] = useState(false);
+  const [rightOpen, setRightOpen] = useState(false);
   const liveRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
@@ -71,7 +71,6 @@ export default function PlayPage() {
   }
 
   function handleBack() {
-    // Confirm exit stub
     if (confirm("Leave the current run and return to the climb?") === true) {
       router.push("/climb");
     }
@@ -88,101 +87,172 @@ export default function PlayPage() {
           {actionMsg}
         </div>
 
-        {/* Left menu (desktop only) */}
+        {/* Left column (desktop): Inventory + Character */}
         <aside className="play-left">
-          <nav className="menu-panel" aria-label="Primary">
-            <div className="panel-title">Menu</div>
+          <div className="menu-panel" aria-label="Inventory" style={{ minHeight: 260 }}>
+            <div className="panel-title">Inventory</div>
             <ul className="menu-list">
-              <li><Link href="/" className="menu-link"><span className="menu-label">Home</span><span className="menu-chev">›</span><span className="menu-sub">Main menu</span></Link></li>
-              <li><Link href="/climb" className="menu-link"><span className="menu-label">Climb the Tower</span><span className="menu-chev">›</span><span className="menu-sub">Start or resume</span></Link></li>
-              <li><Link href="/traders" className="menu-link"><span className="menu-label">Traders’ Guild</span><span className="menu-chev">›</span><span className="menu-sub">Buy, sell, trade</span></Link></li>
-              <li><Link href="/crafters" className="menu-link"><span className="menu-label">Crafters’ Guild</span><span className="menu-chev">›</span><span className="menu-sub">Forge and imbue</span></Link></li>
-              <li><Link href="/inn" className="menu-link"><span className="menu-label">The Inn</span><span className="menu-chev">›</span><span className="menu-sub">Rest and rumors</span></Link></li>
-              <li><Link href="/training" className="menu-link"><span className="menu-label">Training Grounds</span><span className="menu-chev">›</span><span className="menu-sub">Spar and study</span></Link></li>
-              <li><Link href="/settings" className="menu-link"><span className="menu-label">Settings</span><span className="menu-chev">›</span><span className="menu-sub">Accessibility & prefs</span></Link></li>
+              <li><div className="menu-link"><span className="menu-label">Sunsteel Longsword +3</span><span className="menu-chev">×1</span><span className="menu-sub">A blade that hums near magic</span></div></li>
+              <li><div className="menu-link"><span className="menu-label">Towerbread Rations</span><span className="menu-chev">×4</span><span className="menu-sub">Restores a little stamina</span></div></li>
+              <li><div className="menu-link"><span className="menu-label">Flask of Insight</span><span className="menu-chev">×2</span><span className="menu-sub">Reveals hidden runes</span></div></li>
+              <li><div className="menu-link"><span className="menu-label">Hookshot</span><span className="menu-chev">?</span><span className="menu-sub">Traverse chasms and traps</span></div></li>
             </ul>
-          </nav>
+          </div>
+          <div className="menu-panel" aria-label="Character Sheet">
+            <div className="panel-title">Character</div>
+            <div style={{ display: "grid", gap: 8 }}>
+              <div style={{ display: "flex", justifyContent: "space-between" }}>
+                <strong>Level</strong><span>27</span>
+              </div>
+              <div style={{ display: "flex", justifyContent: "space-between" }}>
+                <strong>XP</strong><span>83,234 / 90,000</span>
+              </div>
+              <div style={{ display: "flex", justifyContent: "space-between" }}>
+                <strong>Lifetime Climbs</strong><span>42</span>
+              </div>
+              <div style={{ display: "flex", justifyContent: "space-between" }}>
+                <strong>Highest Clear</strong><span>Floor 7</span>
+              </div>
+              <div>
+                <strong>Skills</strong>
+                <div style={{ color: "var(--color-muted)" }}>Riposte III, Rune Sight II, Iron Will IV, Fleetfoot II</div>
+              </div>
+            </div>
+          </div>
         </aside>
 
-        {/* Middle: scene + controls */}
+        {/* Middle: scene + controls in a console frame */}
         <section className="play-middle">
-          <SceneViewer
-            roomType={(currentType ?? "empty") as any}
-            sceneId={sceneId}
-            caption={caption}
-            grid={grid}
-            playerPos={pos}
-            showOverlay={showOverlay}
-            overlayCentered
-            floor={useRunStore.getState().currentFloor}
-          />
-
-        {/* Map toggle row */}
-        <div style={{ display: "flex", justifyContent: "flex-end" }}>
-          <button
-            onClick={() => setMapOpen((v) => !v)}
-            aria-pressed={mapOpen}
-            aria-label="Open map"
-            style={{
-              padding: "10px 12px",
-              borderRadius: 10,
-              border: "1px solid rgba(255,255,255,0.15)",
-              background: mapOpen ? "rgba(255,255,255,0.18)" : "rgba(255,255,255,0.08)",
-              minHeight: 44,
-            }}
-          >
-            Map
-          </button>
-        </div>
-
-        {/* Map panel: visible below viewer on mobile only */}
-        {mapOpen && (
-          <div className="hide-desktop">
-            <MapPanel onClose={() => setMapOpen(false)} />
+          <div className="console-frame">
+            <SceneViewer
+              roomType={(currentType ?? "empty") as any}
+              sceneId={sceneId}
+              caption={caption}
+              grid={grid}
+              playerPos={pos}
+              showOverlay={showOverlay}
+              overlayCentered
+              floor={useRunStore.getState().currentFloor}
+            />
+            <ThumbBar
+              onMove={(d) => {
+                if (!grid || !pos) return;
+                const passable = new Set(["entry","exit","boss","combat","trap","loot","out","special","empty"]);
+                const W = grid.width, H = grid.height;
+                let nx = pos.x, ny = pos.y;
+                if (d === "north") ny -= 1;
+                if (d === "south") ny += 1;
+                if (d === "west") nx -= 1;
+                if (d === "east") nx += 1;
+                if (nx < 0 || ny < 0 || nx >= W || ny >= H) {
+                  announce("Why are you running face first into that wall?");
+                  return;
+                }
+                const t = grid.cells[ny * W + nx];
+                if (!t || !passable.has(t.type)) {
+                  announce("Why are you running face first into that wall?");
+                  return;
+                }
+                move(d);
+              }}
+              onInspect={() => announce("Inspect (stub)")}
+              onUse={() => announce("Use (stub)")}
+              onDefend={() => announce("Defend (stub)")}
+              onFlee={() => announce("Flee (stub)")}
+              onBack={handleBack}
+              onAscend={async () => { await ascend?.(); window.scrollTo({ top: 0, behavior: "instant" as ScrollBehavior }); }}
+              showAscend={showAscend}
+            />
           </div>
-        )}
 
-        <ThumbBar
-          onMove={(d) => {
-            if (!grid || !pos) return;
-            const passable = new Set(["entry","exit","boss","combat","trap","loot","out","special","empty"]);
-            const W = grid.width, H = grid.height;
-            let nx = pos.x, ny = pos.y;
-            if (d === "north") ny -= 1;
-            if (d === "south") ny += 1;
-            if (d === "west") nx -= 1;
-            if (d === "east") nx += 1;
-            if (nx < 0 || ny < 0 || nx >= W || ny >= H) {
-              announce("Why are you running face first into that wall?");
-              return;
-            }
-            const t = grid.cells[ny * W + nx];
-            if (!t || !passable.has(t.type)) {
-              announce("Why are you running face first into that wall?");
-              return;
-            }
-            move(d);
-          }}
-          onInspect={() => announce("Inspect (stub)")}
-          onUse={() => announce("Use (stub)")}
-          onDefend={() => announce("Defend (stub)")}
-          onFlee={() => announce("Flee (stub)")}
-          onBack={handleBack}
-          onAscend={async () => { await ascend?.(); window.scrollTo({ top: 0, behavior: "instant" as ScrollBehavior }); }}
-          showAscend={showAscend}
-        />
+          {/* Mobile: floating toggles for side drawers */}
+          <div className="hide-desktop" style={{ position: "relative" }}>
+            <div className="mobile-side-buttons">
+              <button className="btn btn--ghost" onClick={() => setLeftOpen(true)} aria-label="Open inventory and character">Inventory</button>
+              <button className="btn btn--ghost" onClick={() => setRightOpen(true)} aria-label="Open map and journal">Map</button>
+            </div>
+          </div>
         </section>
 
-        {/* Right column: journal on desktop */}
-        <div className="play-right">
+        {/* Right column (desktop): Map + Journal */}
+        <div className="play-right" style={{ display: "grid", gap: 12 }}>
+          {!atFinalExit && (
+            <div className="show-desktop">
+              <MapPanel onClose={() => { /* no-op on desktop */ }} />
+            </div>
+          )}
           {atFinalExit && (
             <FinalExtract onExtract={() => { endRun?.(); router.push("/climb"); }} />
           )}
-          {mapOpen && !atFinalExit && (
-            <div className="show-desktop">
-              <MapPanel onClose={() => setMapOpen(false)} />
+          {!atFinalExit && (
+            <div className="menu-panel" aria-label="Journal">
+              <div className="panel-title">Journal</div>
+              <ul className="menu-list">
+                <li><div className="menu-link"><span className="menu-label">Objective: Reach Floor 5</span><span className="menu-chev">•</span><span className="menu-sub">The guild awaits your report</span></div></li>
+                <li><div className="menu-link"><span className="menu-label">Rumor: Hidden Librarium</span><span className="menu-chev">•</span><span className="menu-sub">A tome on Runic Binding exists</span></div></li>
+                <li><div className="menu-link"><span className="menu-label">Lore: The Brass Wardens</span><span className="menu-chev">•</span><span className="menu-sub">Order that guards the 5th ascent</span></div></li>
+              </ul>
             </div>
           )}
+        </div>
+
+        {/* Mobile slide-in drawers */}
+        <button
+          className={`side-drawer-scrim ${leftOpen || rightOpen ? 'is-visible' : ''} hide-desktop`}
+          aria-label="Close panels"
+          onClick={() => { setLeftOpen(false); setRightOpen(false); }}
+        />
+        <div className={`side-drawer side-drawer--left hide-desktop ${leftOpen ? 'is-open' : ''}`} role="dialog" aria-label="Inventory and Character" aria-modal={leftOpen}>
+          <div className="menu-panel" style={{ minHeight: 260 }}>
+            <div className="panel-title">Inventory</div>
+            <ul className="menu-list">
+              <li><div className="menu-link"><span className="menu-label">Sunsteel Longsword +3</span><span className="menu-chev">×1</span><span className="menu-sub">A blade that hums near magic</span></div></li>
+              <li><div className="menu-link"><span className="menu-label">Towerbread Rations</span><span className="menu-chev">×4</span><span className="menu-sub">Restores a little stamina</span></div></li>
+              <li><div className="menu-link"><span className="menu-label">Flask of Insight</span><span className="menu-chev">×2</span><span className="menu-sub">Reveals hidden runes</span></div></li>
+              <li><div className="menu-link"><span className="menu-label">Hookshot</span><span className="menu-chev">?</span><span className="menu-sub">Traverse chasms and traps</span></div></li>
+            </ul>
+          </div>
+          <div className="menu-panel">
+            <div className="panel-title">Character</div>
+            <div style={{ display: "grid", gap: 8 }}>
+              <div style={{ display: "flex", justifyContent: "space-between" }}>
+                <strong>Level</strong><span>27</span>
+              </div>
+              <div style={{ display: "flex", justifyContent: "space-between" }}>
+                <strong>XP</strong><span>83,234 / 90,000</span>
+              </div>
+              <div style={{ display: "flex", justifyContent: "space-between" }}>
+                <strong>Lifetime Climbs</strong><span>42</span>
+              </div>
+              <div style={{ display: "flex", justifyContent: "space-between" }}>
+                <strong>Highest Clear</strong><span>Floor 7</span>
+              </div>
+              <div>
+                <strong>Skills</strong>
+                <div style={{ color: "var(--color-muted)" }}>Riposte III, Rune Sight II, Iron Will IV, Fleetfoot II</div>
+              </div>
+            </div>
+          </div>
+          <div style={{ padding: 8 }}>
+            <button className="btn btn--ghost" onClick={() => setLeftOpen(false)} aria-label="Close left panel" style={{ width: "100%" }}>Close</button>
+          </div>
+        </div>
+        <div className={`side-drawer side-drawer--right hide-desktop ${rightOpen ? 'is-open' : ''}`} role="dialog" aria-label="Map and Journal" aria-modal={rightOpen}>
+          <div className="menu-panel" style={{ minHeight: 260 }}>
+            <div className="panel-title">Map</div>
+            <MapPanel onClose={() => setRightOpen(false)} />
+          </div>
+          <div className="menu-panel" aria-label="Journal">
+            <div className="panel-title">Journal</div>
+            <ul className="menu-list">
+              <li><div className="menu-link"><span className="menu-label">Objective: Reach Floor 5</span><span className="menu-chev">•</span><span className="menu-sub">The guild awaits your report</span></div></li>
+              <li><div className="menu-link"><span className="menu-label">Rumor: Hidden Librarium</span><span className="menu-chev">•</span><span className="menu-sub">A tome on Runic Binding exists</span></div></li>
+              <li><div className="menu-link"><span className="menu-label">Lore: The Brass Wardens</span><span className="menu-chev">•</span><span className="menu-sub">Order that guards the 5th ascent</span></div></li>
+            </ul>
+          </div>
+          <div style={{ padding: 8 }}>
+            <button className="btn btn--ghost" onClick={() => setRightOpen(false)} aria-label="Close right panel" style={{ width: "100%" }}>Close</button>
+          </div>
         </div>
       </div>
     </PageSurface>
@@ -245,7 +315,7 @@ function MapPanel({ onClose }: { onClose: () => void }) {
     >
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
         <strong>Map</strong>
-        <button onClick={onClose} aria-label="Close map" style={{ padding: "6px 10px", borderRadius: 8, border: "1px solid rgba(255,255,255,0.15)", background: "rgba(255,255,255,0.08)" }}>Close</button>
+        <button className="hide-desktop" onClick={onClose} aria-label="Close map" style={{ padding: "6px 10px", borderRadius: 8, border: "1px solid rgba(255,255,255,0.15)", background: "rgba(255,255,255,0.08)" }}>Close</button>
       </div>
       <div
         style={{

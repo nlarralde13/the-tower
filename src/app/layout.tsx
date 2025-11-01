@@ -1,11 +1,11 @@
-import type { Metadata } from "next";
+﻿import type { Metadata } from "next";
 import "../app/globals.css";
 
 import Providers from "@/components/Providers";
 import TopBar from "@/components/TopBar";
 
 export const metadata: Metadata = {
-  title: "The Tower — Pocket Run Edition",
+  title: "The Tower - Pocket Run Edition",
   description: "One-thumb tower crawler with mythic mood.",
   manifest: "/manifest.webmanifest",
   themeColor: "#0b0b11",
