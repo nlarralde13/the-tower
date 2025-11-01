@@ -48,10 +48,10 @@ export function describeCurrentRoom(): string {
 export function moveDir(dir: Dir): string {
   const { x, y } = snap.player.pos;
   const target = translateDir({ x, y }, dir, snap.map.width, snap.map.height);
-  if (!target) return quip(`You attempt to move ${dir}, narrowly avoiding success.`);
+  if (!target) return quip("Why are you running face first into that wall?");
   const idx = target.y * snap.map.width + target.x;
   const room = snap.map.rooms[idx];
-  if (!room || room.type === "void") return quip("That direction is mostly theoretical.");
+  if (!room || room.type === "void") return quip("Why are you running face first into that wall?");
   snap.player.pos = target;
   room.visited = true;
 

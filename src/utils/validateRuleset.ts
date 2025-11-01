@@ -45,7 +45,7 @@ export async function validateRuleset(
       if (!f?.room_ratios) {
         issues.push({ level: "error", message: `Floor ${k}: missing "room_ratios".` });
       } else {
-        const ratios = f.room_ratios as Record<string, unknown>;
+        const ratios = f.room_ratios as unknown as Record<string, unknown>;
         for (const key of RATIO_KEYS) {
           const raw = ratios[key];
           if (raw !== undefined) {

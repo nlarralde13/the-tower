@@ -8,9 +8,11 @@ type RequestBody = {
   baseConfig?: Partial<FloorConfig>;
 };
 
+// Generator uses fixed 8x8; FloorConfig carries difficulty and ratios.
 const DEFAULT_CONFIG: FloorConfig = {
-  width: 8,
-  height: 8,
+  difficulty: 1,
+  room_ratios: { combat: 0.3, trap: 0.2, loot: 0.2, out: 0.15, special: 0.15, empty: 0.2 },
+  boss_room: false,
 };
 
 export async function POST(req: Request) {
@@ -24,12 +26,12 @@ export async function POST(req: Request) {
       );
     }
 
-    const config: FloorConfig = { ...DEFAULT_CONFIG, ...(baseConfig || {}) };
+    const config: FloorConfig = { ...DEFAULT_CONFIG, ...(baseConfig || {}) } as FloorConfig;
     const grid = await generateFloorFromPublicSeed(relPath, config);
 
     return NextResponse.json({
       grid,
-      meta: { relPath, width: config.width, height: config.height },
+      meta: { relPath, width: grid.width, height: grid.height },
     });
   } catch (err: any) {
     return NextResponse.json(

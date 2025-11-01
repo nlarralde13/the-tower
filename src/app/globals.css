@@ -378,6 +378,59 @@ img {
   margin: 0 0 18px;
 }
 
+/* ---------- Play layout (responsive) ---------- */
+.play-grid {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 12px;
+  min-height: 100%;
+}
+
+.play-left {
+  display: none;
+}
+
+.play-middle {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.play-right {
+  display: none;
+}
+
+@media (min-width: 1024px) {
+  .play-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr 1fr;
+    align-items: start;
+    gap: 16px;
+    padding: 16px;
+  }
+  .play-left {
+    display: block;
+    position: sticky;
+    top: var(--topbar-height);
+    align-self: start;
+  }
+  .play-right {
+    display: block;
+    position: sticky;
+    top: var(--topbar-height);
+  }
+}
+
+/* visibility helpers */
+.show-desktop { display: none; }
+.hide-desktop { display: block; }
+@media (min-width: 1024px) {
+  .show-desktop { display: block; }
+  .hide-desktop { display: none; }
+}
+
+
 /* ---------- Auth Gate ---------- */
 .auth-card {
   width: 100%;

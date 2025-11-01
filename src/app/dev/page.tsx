@@ -5,6 +5,7 @@ import { validateRuleset } from "@/utils/validateRuleset";
 import type { Ruleset, FloorGrid, RoomType, FloorConfig, FloorSeed } from "@/types/tower";
 import { mulberry32, type RNG } from "@/engine/rng";
 import { generateFloor, generateFloorFromSeed } from "@/engine/generateFloor";
+import { useRunStore } from "@/store/runStore";
 
 type Issue = { level: "error" | "warn"; message: string };
 type Report = { ok: boolean; issues: Issue[] };
@@ -71,6 +72,7 @@ export default function DevPage() {
   const [seed, setSeed] = useState<string>("123456");
   const [grid, setGrid] = useState<FloorGrid | null>(null);
   const [busyGen, setBusyGen] = useState(false);
+  const devSetRun = useRunStore((s) => s._devSetRunFromSeed);
 
   // Live tuning knobs
   const [minEmpty, setMinEmpty] = useState(0.6);
@@ -145,6 +147,7 @@ export default function DevPage() {
         loot: 0,
         out: 0,
         special: 0,
+        boss: 0,
         empty: 0,
       } satisfies Record<RatioKey, number>;
     }
@@ -424,6 +427,20 @@ export default function DevPage() {
             title="Load a JSON seed and generate immediately"
           >
             Import Seed JSON
+          </button>
+          <button
+            onClick={async () => {
+              if (!devSetRun) return;
+              const n = parseInt(String(seed), 10);
+              if (Number.isNaN(n)) return alert("Enter a numeric seed to warp.");
+              await devSetRun(floorIdx, n >>> 0);
+              // Navigate to play
+              window.location.href = "/play?overlay=1";
+            }}
+            style={{ ...BUTTON_STYLE }}
+            title="Warp into /play using current Floor/Seed"
+          >
+            Warp → /play
           </button>
         </div>
 

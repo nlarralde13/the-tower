@@ -60,8 +60,8 @@ export function buildFloorSeedFromTemplate(
 export function generateFloorForRun(
   floorTemplate: RulesetFloor,
   baseConfig: FloorConfig,
+  generateFloorFromSeedImpl: (s: FloorSeed, c: FloorConfig) => any,
   seed?: number,
-  generateFloorFromSeedImpl: (s: FloorSeed, c: FloorConfig) => any
 ) {
   const floorSeed = buildFloorSeedFromTemplate(floorTemplate, seed);
   return generateFloorFromSeedImpl(floorSeed, baseConfig);

@@ -39,8 +39,9 @@ function normalizeWeights<K extends string>(weights: Record<K, number>): Record<
 // Largest Remainder Method to convert fractional shares into integers
 function apportion<K extends string>(total: number, weights: Record<K, number>): Record<K, number> {
   const norm = normalizeWeights(weights);
-  const quotas = Object.entries(norm).map(([k, w]) => {
-    const exact = w * total;
+  const entries = Object.entries(norm) as Array<[K, number]>;
+  const quotas = entries.map(([k, w]) => {
+    const exact = (w as number) * total;
     return { k: k as K, floor: Math.floor(exact), remainder: exact - Math.floor(exact) };
   });
   const used = quotas.reduce((a, q) => a + q.floor, 0);
@@ -69,7 +70,7 @@ function fillByCounts(
 }
 
 type RoomRatioOverride = Partial<
-  Pick<Record<RoomType, number>, "combat" | "trap" | "loot" | "out" | "special" | "empty">
+  Pick<Record<RoomType, number>, "combat" | "trap" | "loot" | "out" | "special" | "empty" | "boss">
 >;
 
 type CameFrom = { prev: string; dir: Point };
@@ -494,6 +495,33 @@ export function generateFloor(
     for (const p of riverPath) {
       const c = cells[idx(p.x, p.y)];
       if (c.type === "blocked") c.type = "empty";
+    }
+  }
+
+  // Ensure entry has at least 3 viable neighboring exits (non-blocked moves)
+  {
+    const passable = new Set<RoomType>([
+      "entry",
+      "exit",
+      "boss",
+      "combat",
+      "trap",
+      "loot",
+      "out",
+      "special",
+      "empty",
+    ]);
+    const nbs = neighbors4(entry, W, H);
+    let openCount = nbs.reduce((acc, p) => (passable.has(cells[idx(p.x, p.y)].type) ? acc + 1 : acc), 0);
+    if (openCount < 3) {
+      for (const p of nbs) {
+        if (openCount >= 3) break;
+        const c = cells[idx(p.x, p.y)];
+        if (c.type === "blocked") {
+          c.type = "empty";
+          openCount += 1;
+        }
+      }
     }
   }
 

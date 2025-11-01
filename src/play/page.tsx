@@ -7,7 +7,7 @@ export default function Play({ searchParams }: { searchParams: { tower?: string 
   return (
     <main className="mx-auto max-w-6xl p-4 grid grid-cols-[minmax(640px,1fr)_320px] gap-4">
       <section className="aspect-square">
-        <GameViewport towerId={towerId} />
+        <GameViewport />
       </section>
       <aside className="space-y-3">
         <div className="rounded-lg border border-zinc-800 p-3">
