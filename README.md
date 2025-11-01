@@ -1,43 +1,91 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# The Tower
+
+A small roguelite prototype built with Next.js that generates 8x8 tower floors, lets you explore room-by-room, and layers in flavor text, scenes, and simple UI flows. This repository includes the floor generator, dev tools, a lightweight run state store, and a basic play experience.
+
+## Features
+- 8x8 procedural floor generation with reproducible seeds
+- Fixed seeds in `public/data` for repeatable floors (e.g., Floor 1 / Floor 5)
+- Room types: entry, exit, boss, combat, trap, loot, out, special, empty, blocked
+- Per-room flavor text pools (snarky, configurable per type)
+- Play page with scene viewer, D‑pad, and a compact 8×8 map
+- Dev page to tweak densities and export/import seeds
+- Minimal NextAuth (Google) wiring for gated pages
+
+## Tech Stack
+- Next.js (App Router)
+- TypeScript, React
+- Zustand for run state (`src/store/runStore.ts`)
+- Jest for tests (basic setup)
 
 ## Getting Started
 
-First, run the development server:
+### Prerequisites
+- Node.js 18+
+- pnpm, npm, or yarn
 
-```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
-```
+### Install
+- pnpm: `pnpm install`
+- npm: `npm install`
+- yarn: `yarn`
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+### Environment
+Create `.env.local` at the repo root (see examples below).
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+Required for NextAuth Google provider (climb/play gating):
+- `GOOGLE_CLIENT_ID=...`
+- `GOOGLE_CLIENT_SECRET=...`
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+Optional: add other NextAuth providers as needed in `src/app/api/auth/[...nextauth]/route.ts`.
 
-## Learn More
+### Scripts
+- `pnpm dev` / `npm run dev` — start dev server
+- `pnpm build` / `npm run build` — production build
+- `pnpm start` / `npm run start` — run production server
+- `pnpm test` / `npm run test` — run Jest tests
 
-To learn more about Next.js, take a look at the following resources:
+### Running
+- Visit `/` for the main menu
+- Go to `/climb` to start a run (auth‑gated)
+- The play UI is at `/play`
+- Dev tools at `/dev` for generation controls and seed IO
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+## Project Structure
+- `src/app` — Next.js routes and UI
+  - `page.tsx` (home), `climb`, `play`, `traders`, `crafters`, `inn`, `training`
+  - `api/` — server routes; `auth/[...nextauth]`, `floors/from-public`
+- `src/components` — shared UI (PageSurface, menus, etc.)
+- `src/store/runStore.ts` — run lifecycle, movement, scene pools, journal
+- `src/engine` — generation algorithms and seed IO
+- `src/types/tower.ts` — core types (RoomType, FloorGrid, FloorSeed, etc.)
+- `src/game` — player‑facing strings and helpers
+  - `flavor/` — per‑room flavor text files
+  - `flavor.ts` — exports `chooseFlavor` and `exitsFlavor`
+  - `content/flavor.ts` — wrapper for engine imports
+- `public/data` — example seed JSON and ruleset template
+- `public/images/scenes` — scene imagery placeholders
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+## Key Flows
+- Start/Resume: `/climb` uses Zustand action `enterRun()` to seed and enter Floor 1, then routes to `/play`.
+- Movement: D‑pad triggers `useRunStore.getState().move(dir)`. Movement updates `playerPos`, adds a journal entry, and picks a scene path from per‑type pools.
+- Flavor: `chooseFlavor(type)` returns a randomized per‑type line; UI combines it with exit hints.
+- Map: The map shades unvisited rooms dark; visited rooms are white; the current room has a marker and highlighted border. The map resets naturally on floor change based on `journal` entries filtered by the current floor.
 
-## Epic 1 — Retro Look & TopBar
+## Seed & Ruleset
+- Example seeds: `public/data/floor-seed-f1-s1130215123.json`, `public/data/floor-seed-f5-s3707387099.json`
+- Ruleset template: `public/data/rulesetTemplate.json` (per‑floor ratios, difficulty)
+- API: `POST /api/floors/from-public` loads a seed from `/public/data` and returns a generated grid
 
-The “Thumb UX & Mobile Flow” epic introduces a static retro treatment and persistent accessibility preferences:
+## Testing
+- Jest is configured via `jest.config.js` and `jest.setup.ts`
+- Add focused tests near logic in `src/engine` and `src/store`
 
-- A transparent scanline overlay is expected at `/public/overlays/scanlines.png` and is always mounted once at the root. The repository does not track the bitmap so the element simply fades in/out when the asset is provided downstream.
-- The soft retro filter is a class-based wrapper that applies `contrast(1.07)` and `brightness(0.97)` plus a fixed vignette. Both modes honour `prefers-reduced-motion`.
-- Preferences persist to `localStorage` under `pref:retro`, `pref:hc`, `pref:textlg`, and `pref:haptics`. They hydrate through a shared `PreferencesProvider` that updates `<html>` attributes for `[data-hc]` and `[data-bigtext]`.
-- The refreshed TopBar keeps a 64px touch target, centres the identity block, and exposes Settings and Sign in/out actions with accessible focus states.
-- Page backgrounds are supplied per route through `<PageSurface backgroundImage="/backgrounds/..." />`, layered with a static gradient and grain for a stable, non-jitter look. As with the overlay, ship the background bitmaps out-of-band under `/public/backgrounds/`.
-- PWA icons are referenced from `/public/icons/icon-192.png` and `/public/icons/icon-512.png`. Provide production-ready PNGs outside of this repository to avoid large binary diffs in pull requests.
+## Accessibility
+- Announcements via `aria-live` for action feedback in `/play`
+- Buttons adopt shared styles and focus outlines in `globals.css`
 
-Visit `/settings` to toggle retro modes, high contrast, large text, and future haptics support.
+## Contributing
+- See `DEVELOPER.md` for architecture and guidelines
+- PRs should keep changes scoped, typed, and consistent with existing patterns
+
+## License
+- Proprietary/in‑repo use unless otherwise noted (no license file provided)

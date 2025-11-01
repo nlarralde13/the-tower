@@ -66,3 +66,35 @@ This log records the set of changes made to implement the distance-band corridor
 - The dev page defaults `boss` to 0 if omitted in the ruleset.
 - All changes preserve seeded RNG behavior and are additive.
 
+---
+
+Date: 2025-11-01
+
+## Session Summary (UI polish, flavor system, map)
+
+### Climb Page
+- Restyled to use panel layout for consistency with other pages (.tower-shell + .menu-panel).
+- Added randomized Monty Python–style flavor blurb (5 options) selected on page load.
+- Applied a dark overlay to the background to reduce visual noise.
+
+### Per-Room Flavor Text
+- Introduced dedicated per-type content files under src/game/flavor/:
+  - entry.ts, exit.ts, empty.ts, combat.ts, 	rap.ts, loot.ts, out.ts, special.ts, oss.ts (5 lines each).
+- src/game/flavor.ts now imports these files and exposes chooseFlavor() / exitsFlavor().
+- src/game/content/flavor.ts updated to wrap chooseFlavor() and return a friendly quip for invalid moves.
+
+### Movement Feedback (no exit)
+- When attempting to move into walls/void, the UI/engine now respond with:
+  - “Why are you running face first into that wall?”
+  - Applied in src/app/play/page.tsx D-pad handler and src/game/engine.ts command engine.
+
+### Map Panel (replaces Journal)
+- Added a Map panel to /play:
+  - 8×8 grid with 32px tiles.
+  - Dark gray = unknown; white = visited; current room shows a circular marker and gold border.
+  - Resets on floor ascension by filtering journal entries for the current floor.
+  - Mobile: opens below the viewer; Desktop: renders in the right column.
+
+### Misc
+- Updated /climb button styles to shared .btn variants.
+- General copy edits and small UX consistency tweaks.
