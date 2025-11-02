@@ -1,79 +1,108 @@
 # Developer Guide
 
-This document explains the architecture, main modules, and conventions for The Tower.
+Concise architecture, routes, paths, and design notes for The Tower.
 
-## Architecture
-- App Router (Next.js) renders pages under `src/app/*`.
-- State: A single Zustand store in `src/store/runStore.ts` manages the “run”: seeds, grid, movement, scene selection, simple journal, and dev flags.
-- Engine: Floor generation and seed IO in `src/engine/*` (deterministic with seeds).
-- Game: Player‑facing copy and helpers in `src/game/*` (flavor, exits copy, command engine used by ConsolePanel prototype).
-- UI: Reusable components in `src/components/*` (PageSurface, MainMenu, ThumbBar, etc.), global styles in `src/app/globals.css`.
+**Repo Shape**
+- App Router UI under `src/app/*` with API routes.
+- Deterministic generation + seed IO under `src/engine/*`.
+- Gameplay run state in `src/store/runStore.ts`.
+- Flavor and legacy console-prototype in `src/game/*`.
+- Reusable UI in `src/components/*` and global styles in `src/app/globals.css`.
 
-## Key Types
-- `RoomType`: `entry | exit | boss | combat | trap | loot | out | special | empty | blocked`.
-- `FloorGrid`: `{ width, height, cells[], entry, exit, boss? }`.
-- `FloorSeed`: serialized knobs + RNG seed to reproduce a floor.
-- See `src/types/tower.ts` for details.
+**Key Types**
+- Room types: `entry | exit | boss | combat | trap | loot | out | special | empty | blocked`.
+- Grid: `FloorGrid = { width, height, cells[], entry, exit, boss? }`.
+- Seed: `FloorSeed` captures floor number, RNG seed, options, and ratios.
+- Reference: `src/types/tower.ts:1`.
 
-## runStore (Gameplay State)
-- Entry point actions:
-  - `enterRun()` — creates a run, loads ruleset, generates Floor 1, sets player at entry.
-  - `resumeFromStorage()` — restores last run from localStorage.
-  - `ascend()` — switches to next floor using fixed public seeds for 1–4 or 5.
-  - `move(dir)` — validates neighbor, updates `playerPos`, selects a scene path from a per‑type pool, and logs a journal entry.
-- Scene pools: defined in `initialPools()`; `drawFromPool()` picks an image path and prevents immediate repetition per room type.
-- Journal: list of `{ t, floor, x, y, type, scene }` entries used by UI and (now) the Map.
+**Routes**
+- Public pages
+  - `/` home: `src/app/page.tsx:1`
+  - `/dev` generator tools: `src/app/dev/page.tsx:1`
+  - `/dev/seed-preview` server preview: `src/app/dev/seed-preview/page.tsx:1`
+  - `/play` gameplay UI (client-state; redirects to `/climb` if no run): `src/app/play/page.tsx:1`
+- Auth-protected via middleware
+  - `/climb`: start a run, then route to `/play` — `src/app/climb/page.tsx:1`
+  - `/traders`: `src/app/traders/page.tsx:1`
+  - `/crafters`: `src/app/crafters/page.tsx:1`
+  - `/inn`: `src/app/inn/page.tsx:1`
+  - `/training`: `src/app/training/page.tsx:1`
+- Middleware config and matchers: `middleware.ts:1` (protects the 5 routes above)
+- App chrome and global CSS: `src/app/layout.tsx:1`, `src/app/globals.css:1`
 
-## Generation
-- `generateFloorFromSeed(seed, cfg)` — main deterministic generator.
-- Ratios live in rulesets (`public/data/rulesetTemplate.json`) or per floor config.
-- A corridor (entry→exit) is carved first; bands expand to meet open/blocked targets.
+**API**
+- `POST /api/floors/from-public` — generate from a seed JSON in `public/`
+  - File: `src/app/api/floors/from-public/route.ts:1`
+  - Body: `{ relPath: "/data/floor-seed-...json", baseConfig?: Partial<FloorConfig> }`
+- NextAuth (Google provider wired)
+  - File: `src/app/api/auth/[...nextauth]/route.ts:1`
+  - Add providers here; `.env.local` must define `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`.
 
-## Flavor System
-- Per‑room content files in `src/game/flavor/*.ts` (arrays of strings per type).
-- `src/game/flavor.ts` imports them and exports:
-  - `chooseFlavor(type)` — returns a randomized line for a `RoomType`.
-  - `exitsFlavor(dirs)` — converts exits to natural language.
-- `src/game/content/flavor.ts` is a compatibility wrapper for engine imports and also provides the “wall” quip for void/blocked.
+**Auth**
+- Server-side: `withAuth` middleware enforces auth on `/climb`, `/traders`, `/crafters`, `/inn`, `/training` — `middleware.ts:1`.
+- Client-side: `AuthGate` wraps content on several pages (including home) and shows a provider chooser — `src/components/AuthGate.tsx:1`.
 
-## Play UI
-- `src/app/play/page.tsx` renders:
-  - Left menu (desktop): quick links.
-  - Middle: SceneViewer and controls (ThumbBar).
-  - Right: Map panel (replaces the old Journal).
-- Movement feedback: Attempting to go into a wall announces “Why are you running face first into that wall?”.
-- Map panel:
-  - 32×32 tiles; dark gray for unknown, white for visited; current tile shows a circular marker and gold border.
-  - Resets per floor by filtering journal entries where `entry.floor === currentFloor`.
-  - Opens inline on mobile and in the right column on desktop.
+**State: runStore**
+- File: `src/store/runStore.ts:1`
+- Persists to `localStorage` under `runState:v1`.
+- Actions
+  - `enterRun()` — loads ruleset (`/data/rulesetTemplate.json`), builds seed, generates Floor 1, sets entry.
+  - `resumeFromStorage()` — restores run on mount.
+  - `move(dir)` — validates neighbor, updates `playerPos`, chooses a scene image from per-type pools, logs journal.
+  - `ascend()` — requires being on `exit`; loads fixed floor seeds from `public/data` for floors 2–5 and regenerates grid.
+  - `endRun()` — clears state and storage.
+- Scene pools: `initialPools()` returns non-repeating pools per `RoomType`.
+- Journal: entries `{ t, floor, x, y, type, scene }` used by the map.
 
-## Styling
-- `PageSurface` uses CSS variables to set background image and optional overlay.
-- Panels follow the `.tower-shell` (center layout) and `.menu-panel` (card) styles.
-- Shared button classes: `.btn`, `.btn--primary`, `.btn--ghost` in `globals.css`.
+**Engine: generation + seeds**
+- Deterministic grid generation: `src/engine/generateFloor.ts:1`
+  - Fixed size 8×8; random entry/exit (borders), optional boss.
+  - Carves an A*-like “river” path with tunable wiggle and width; expands to hit open/blocked targets.
+  - Locks a fraction of corridor tiles to `empty` (`pathEmptyBias`) to keep travel space readable.
+  - Apportions remaining open cells into room types using Largest Remainder from provided ratios.
+  - Ensures exit reachability and that entry has at least 3 passable neighbors.
+- Seed utilities
+  - Build seed from ruleset floor template: `src/engine/runFactory.ts:1`
+  - Server-side seed loading from `public/`: `src/engine/seedIO.ts:1`
+  - Client-side seed loading via fetch: `src/engine/seedIO.client.ts:1`
+- RNG and helpers: `src/engine/rng.ts:1`, grid path helpers: `src/engine/path.ts:1`
 
-## Auth
-- `src/app/api/auth/[...nextauth]/route.ts` defines a Google provider.
-- Requires `GOOGLE_CLIENT_ID` and `GOOGLE_CLIENT_SECRET` in `.env.local`.
-- `AuthGate` component guards certain pages.
+**Play UI**
+- Primary gameplay page: `src/app/play/page.tsx:1`
+  - Left (desktop): Inventory + Character (static placeholders).
+  - Middle: `SceneViewer` with caption composed from `chooseFlavor(type)` and `exitsFlavor(dirs)`; D-pad via `ThumbBar` for movement.
+  - Right (desktop): Map (visited vs unknown) + Journal; final extract panel on Floor 5 exit.
+  - Mobile: inventory/map slide-in drawers; dev overlay toggled by `?overlay=1`.
+- Quip on invalid moves: “Why are you running face first into that wall?”
+- Prototype console/legend grid: `src/app/play/PlayClient.tsx:1` with `GameViewer`/`ConsolePanel` (legacy dev aid, not the main UI path).
 
-## Dev Tools
-- `/dev` page provides sliders for room ratios, seed controls, and seed import/export.
-- `src/app/api/floors/from-public/route.ts` allows POSTing a path under `/public/data` to return a generated grid.
+**Flavor System**
+- Per-room flavor text modules: `src/game/flavor/*.ts` with aggregator `src/game/flavor.ts:1`.
+- `chooseFlavor(type)` and `exitsFlavor(dirs)` used for captions on `/play`.
 
-## Testing
-- Jest configuration in `jest.config.js`; setup in `jest.setup.ts`.
-- Prefer colocated tests near the engine and store logic.
+**Data**
+- Example seeds
+  - `public/data/floor-seed-f1-s1130215123.json`
+  - `public/data/floor-seed-f5-s3707387099.json`
+- Ruleset template for floors/ratios: `public/data/rulesetTemplate.json`
 
-## Conventions
-- Keep changes narrowly scoped; avoid gratuitous renames.
-- Maintain deterministic behavior in the generator when given the same seed.
-- Keep per‑room copy in `src/game/flavor/*` and reuse `chooseFlavor()`.
-- UI additions should use existing panel and button styles when possible.
+**Styling**
+- Shared layout and panels in `globals.css` — `src/app/globals.css:1`.
+- Common classes: `.tower-shell`, `.menu-panel`, `.btn`, `.btn--primary`, `.btn--ghost`.
+- Play layout CSS (legacy/prototype): `src/app/play/tower.css:1`, `src/app/play/vertical.css:1`.
 
-## Roadmap Ideas
-- Combat loop prototype; inventory and loot interactions.
-- Fog‑of‑war map (show adjacent unknown differently).
-- Multiple scene variants per room type with weighted pools.
-- Expanded auth providers and user profiles.
-- More tests around generator edge cases.
+**Testing**
+- Jest config: `jest.config.js:1`, setup: `jest.setup.ts:1`.
+- Prefer colocated tests near `src/engine` and `src/store` logic.
+
+**Conventions**
+- Keep generation deterministic given the same `FloorSeed`.
+- Avoid gratuitous renames; match existing naming and style.
+- Keep room-flavor copy under `src/game/flavor/*`; reuse `chooseFlavor()`.
+- UI should reuse panel/button styles and `PageSurface` backgrounds.
+
+**Notes & Gotchas**
+- Home `/` wraps content with `AuthGate` (client-side), while middleware protects a subset of routes server-side.
+- Only Google is configured in NextAuth by default; `AuthGate` shows multiple options, but add providers in `src/app/api/auth/[...nextauth]/route.ts:1` to enable them.
+- `src/pages/_app.tsx:1` and `src/app/play/PlayClient.tsx:1` are legacy/prototype remnants; main routing uses the App Router and `src/app/play/page.tsx`.
+
