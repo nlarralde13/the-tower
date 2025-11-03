@@ -5,7 +5,12 @@ import PageSurface from "@/components/PageSurface";
 import SceneViewer from "@/components/SceneViewer";
 import ThumbBar from "@/components/ThumbBar";
 import CombatOverlay from "@/components/combat/CombatOverlay";
+import CompactMeterGroup, { type GaugeValue } from "@/components/hud/CompactMeters";
+import SlideDrawer from "@/components/drawers/SlideDrawer";
+import { useUIStore, type PanelName } from "@/store/uiStore";
 import { useRunStore } from "@/store/runStore";
+import { useCombatStore } from "@/state/combatStore";
+import { useHaptics } from "@/hooks/useHaptics";
 import { chooseFlavor, exitsFlavor } from "@/game/flavor";
 import { getEnemyDefinition } from "@/content/index";
 import { useRouter, useSearchParams } from "next/navigation";
@@ -32,9 +37,16 @@ export default function PlayPage() {
   const defeatOverlay = useRunStore((s) => s.defeatOverlay);
 
   const [actionMsg, setActionMsg] = useState<string>("");
-  // Mobile slide-in drawers
-  const [leftOpen, setLeftOpen] = useState(false);
-  const [rightOpen, setRightOpen] = useState(false);
+  const characterOpen = useUIStore((state) => state.openPanels.character);
+  const mapOpen = useUIStore((state) => state.openPanels.map);
+  const journalOpen = useUIStore((state) => state.openPanels.journal);
+  const combatDrawerOpen = useUIStore((state) => state.openPanels.combatActions);
+  const togglePanel = useUIStore((state) => state.toggle);
+  const closePanel = useUIStore((state) => state.close);
+  const openPanel = useUIStore((state) => state.open);
+  const handleToggleDrawer = (panel: PanelName) => () => togglePanel(panel);
+  const handleCloseDrawer = (panel: PanelName) => () => closePanel(panel);
+  const { trigger: triggerHaptic } = useHaptics();
   const liveRef = useRef<HTMLDivElement | null>(null);
 
   //AUDIO
@@ -97,6 +109,22 @@ export default function PlayPage() {
   }, [mode, combatCaption, caption, currentKey, completedRooms]);
 
   const combatActive = mode === "combat";
+  const heroMeters = useMemo<GaugeValue[]>(
+    () => [
+      { label: "HP", icon: "❤", current: 32, max: 40, color: "#ec6d6d" },
+      { label: "MP", icon: "🔮", current: 18, max: 28, color: "#6aa8ff" },
+      { label: "STA", icon: "⚡", current: 54, max: 60, color: "#f7c96d" },
+    ],
+    []
+  );
+
+  useEffect(() => {
+    if (mode === "combat") {
+      openPanel("combatActions");
+    } else {
+      closePanel("combatActions");
+    }
+  }, [mode, openPanel, closePanel]);
 
   function announce(msg: string) {
     setActionMsg(msg);
@@ -139,12 +167,13 @@ export default function PlayPage() {
     if (previous !== mode) {
       if (mode === "combat") {
         announce("Combat initiated.");
+        triggerHaptic("combat_start");
       } else if (previous === "combat" && mode === "explore") {
         announce("Combat resolved.");
       }
       prevModeRef.current = mode;
     }
-  }, [mode]);
+  }, [mode, triggerHaptic]);
 
   function handleBack() {
     if (confirm("Leave the current run and return to the climb?") === true) {
@@ -167,36 +196,8 @@ export default function PlayPage() {
 
         {/* Left column (desktop): Inventory + Character */}
         <aside className="play-left">
-          <div className="menu-panel" aria-label="Inventory" style={{ minHeight: 260 }}>
-            <div className="panel-title">Inventory</div>
-            <ul className="menu-list">
-              <li><div className="menu-link"><span className="menu-label">Sunsteel Longsword +3</span><span className="menu-chev">×1</span><span className="menu-sub">A blade that hums near magic</span></div></li>
-              <li><div className="menu-link"><span className="menu-label">Towerbread Rations</span><span className="menu-chev">×4</span><span className="menu-sub">Restores a little stamina</span></div></li>
-              <li><div className="menu-link"><span className="menu-label">Flask of Insight</span><span className="menu-chev">×2</span><span className="menu-sub">Reveals hidden runes</span></div></li>
-              <li><div className="menu-link"><span className="menu-label">Hookshot</span><span className="menu-chev">?</span><span className="menu-sub">Traverse chasms and traps</span></div></li>
-            </ul>
-          </div>
-          <div className="menu-panel" aria-label="Character Sheet">
-            <div className="panel-title">Character</div>
-            <div style={{ display: "grid", gap: 8 }}>
-              <div style={{ display: "flex", justifyContent: "space-between" }}>
-                <strong>Level</strong><span>27</span>
-              </div>
-              <div style={{ display: "flex", justifyContent: "space-between" }}>
-                <strong>XP</strong><span>83,234 / 90,000</span>
-              </div>
-              <div style={{ display: "flex", justifyContent: "space-between" }}>
-                <strong>Lifetime Climbs</strong><span>42</span>
-              </div>
-              <div style={{ display: "flex", justifyContent: "space-between" }}>
-                <strong>Highest Clear</strong><span>Floor 7</span>
-              </div>
-              <div>
-                <strong>Skills</strong>
-                <div style={{ color: "var(--color-muted)" }}>Riposte III, Rune Sight II, Iron Will IV, Fleetfoot II</div>
-              </div>
-            </div>
-          </div>
+          <InventoryPanel />
+          <CharacterPanel meters={heroMeters} />
         </aside>
 
         {/* Middle: scene + controls in a console frame */}
@@ -245,16 +246,18 @@ export default function PlayPage() {
                     }
                     move(d);
                   }}
-                  onInspect={handleInspect}
-                  onUse={() => announce("Use (stub)")}
+                  onInteract={handleInspect}
+                  onAttack={() => announce("Attack (stub)")}
+                  onSkill={() => announce("Skill (stub)")}
+                  onItem={() => announce("Item (stub)")}
                   onDefend={() => announce("Defend (stub)")}
-                  onFlee={() => announce("Flee (stub)")}
                   onBack={handleBack}
                   onAscend={async () => {
                     await ascend?.();
                     window.scrollTo({ top: 0, behavior: "instant" as ScrollBehavior });
                   }}
                   showAscend={showAscend}
+                  mode={mode}
                   disabled={defeatOverlay}
                 />
               ) : null}
@@ -262,11 +265,30 @@ export default function PlayPage() {
             <CombatOverlay active={combatActive} />
           </div>
 
-          {/* Mobile: floating toggles for side drawers */}
+          {/* Mobile: floating toggles for drawers */}
           <div className="hide-desktop" style={{ position: "relative" }}>
             <div className="mobile-side-buttons">
-              <button className="btn btn--ghost" onClick={() => setLeftOpen(true)} aria-label="Open inventory and character">Inventory</button>
-              <button className="btn btn--ghost" onClick={() => setRightOpen(true)} aria-label="Open map and journal">Map</button>
+              <button
+                className="btn btn--ghost"
+                onClick={handleToggleDrawer("character")}
+                aria-label="Open character drawer"
+              >
+                Character
+              </button>
+              <button
+                className="btn btn--ghost"
+                onClick={handleToggleDrawer("map")}
+                aria-label="Open map drawer"
+              >
+                Map
+              </button>
+              <button
+                className="btn btn--ghost"
+                onClick={handleToggleDrawer("journal")}
+                aria-label="Open journal drawer"
+              >
+                Journal
+              </button>
             </div>
           </div>
         </section>
@@ -275,7 +297,7 @@ export default function PlayPage() {
         <div className="play-right" style={{ display: "grid", gap: 12 }}>
           {!atFinalExit && (
             <div className="show-desktop">
-              <MapPanel onClose={() => { /* no-op on desktop */ }} />
+              <MapPanel />
             </div>
           )}
           {atFinalExit && (
@@ -284,64 +306,48 @@ export default function PlayPage() {
           {!atFinalExit && <JournalPanel />}
         </div>
 
-        {/* Mobile slide-in drawers */}
-        <button
-          className={`side-drawer-scrim ${leftOpen || rightOpen ? 'is-visible' : ''} hide-desktop`}
-          aria-label="Close panels"
-          onClick={() => { setLeftOpen(false); setRightOpen(false); }}
-        />
-        <div className={`side-drawer side-drawer--left hide-desktop ${leftOpen ? 'is-open' : ''}`} role="dialog" aria-label="Inventory and Character" aria-modal={leftOpen}>
-          <div className="menu-panel" style={{ minHeight: 260 }}>
-            <div className="panel-title">Inventory</div>
-            <ul className="menu-list">
-              <li><div className="menu-link"><span className="menu-label">Sunsteel Longsword +3</span><span className="menu-chev">×1</span><span className="menu-sub">A blade that hums near magic</span></div></li>
-              <li><div className="menu-link"><span className="menu-label">Towerbread Rations</span><span className="menu-chev">×4</span><span className="menu-sub">Restores a little stamina</span></div></li>
-              <li><div className="menu-link"><span className="menu-label">Flask of Insight</span><span className="menu-chev">×2</span><span className="menu-sub">Reveals hidden runes</span></div></li>
-              <li><div className="menu-link"><span className="menu-label">Hookshot</span><span className="menu-chev">?</span><span className="menu-sub">Traverse chasms and traps</span></div></li>
-            </ul>
-          </div>
-          <div className="menu-panel">
-            <div className="panel-title">Character</div>
-            <div style={{ display: "grid", gap: 8 }}>
-              <div style={{ display: "flex", justifyContent: "space-between" }}>
-                <strong>Level</strong><span>27</span>
-              </div>
-              <div style={{ display: "flex", justifyContent: "space-between" }}>
-                <strong>XP</strong><span>83,234 / 90,000</span>
-              </div>
-              <div style={{ display: "flex", justifyContent: "space-between" }}>
-                <strong>Lifetime Climbs</strong><span>42</span>
-              </div>
-              <div style={{ display: "flex", justifyContent: "space-between" }}>
-                <strong>Highest Clear</strong><span>Floor 7</span>
-              </div>
-              <div>
-                <strong>Skills</strong>
-                <div style={{ color: "var(--color-muted)" }}>Riposte III, Rune Sight II, Iron Will IV, Fleetfoot II</div>
-              </div>
-            </div>
-          </div>
-          <div style={{ padding: 8 }}>
-            <button className="btn btn--ghost" onClick={() => setLeftOpen(false)} aria-label="Close left panel" style={{ width: "100%" }}>Close</button>
-          </div>
-        </div>
-        <div className={`side-drawer side-drawer--right hide-desktop ${rightOpen ? 'is-open' : ''}`} role="dialog" aria-label="Map and Journal" aria-modal={rightOpen}>
-          <div className="menu-panel" style={{ minHeight: 260 }}>
-            <div className="panel-title">Map</div>
-            <MapPanel onClose={() => setRightOpen(false)} />
-          </div>
-          <div className="menu-panel" aria-label="Journal">
-            <div className="panel-title">Journal</div>
-            <ul className="menu-list">
-              <li><div className="menu-link"><span className="menu-label">Objective: Reach Floor 5</span><span className="menu-chev">•</span><span className="menu-sub">The guild awaits your report</span></div></li>
-              <li><div className="menu-link"><span className="menu-label">Rumor: Hidden Librarium</span><span className="menu-chev">•</span><span className="menu-sub">A tome on Runic Binding exists</span></div></li>
-              <li><div className="menu-link"><span className="menu-label">Lore: The Brass Wardens</span><span className="menu-chev">•</span><span className="menu-sub">Order that guards the 5th ascent</span></div></li>
-            </ul>
-          </div>
-          <div style={{ padding: 8 }}>
-            <button className="btn btn--ghost" onClick={() => setRightOpen(false)} aria-label="Close right panel" style={{ width: "100%" }}>Close</button>
-          </div>
-        </div>
+        {/* Mobile & responsive drawers */}
+        <SlideDrawer
+          id="character-drawer"
+          side="left"
+          open={characterOpen}
+          onClose={handleCloseDrawer("character")}
+          labelledBy="character-drawer-title"
+        >
+          <CharacterPanel meters={heroMeters} titleId="character-drawer-title" />
+          <InventoryPanel />
+        </SlideDrawer>
+
+        <SlideDrawer
+          id="map-drawer"
+          side="right"
+          open={mapOpen}
+          onClose={handleCloseDrawer("map")}
+          labelledBy="map-drawer-title"
+        >
+          <MapPanel onClose={handleCloseDrawer("map")} titleId="map-drawer-title" />
+        </SlideDrawer>
+
+        <SlideDrawer
+          id="journal-drawer"
+          side="bottom"
+          variant="journal"
+          open={journalOpen}
+          onClose={handleCloseDrawer("journal")}
+          labelledBy="journal-drawer-title"
+        >
+          <JournalPanel titleId="journal-drawer-title" />
+        </SlideDrawer>
+
+        <SlideDrawer
+          id="combat-sheet"
+          side="bottom"
+          open={combatDrawerOpen}
+          onClose={handleCloseDrawer("combatActions")}
+          labelledBy="combat-sheet-title"
+        >
+          <CombatActionSheet />
+        </SlideDrawer>
       </div>
     </PageSurface>
   );
@@ -420,6 +426,130 @@ function DefeatOverlay({ onEndRun }: { onEndRun: () => void }) {
   );
 }
 
+function InventoryPanel() {
+  return (
+    <div className="menu-panel" aria-label="Inventory" style={{ minHeight: 260 }}>
+      <div className="panel-title">Inventory</div>
+      <ul className="menu-list">
+        <li>
+          <div className="menu-link">
+            <span className="menu-label">Sunsteel Longsword +3</span>
+            <span className="menu-chev">×1</span>
+            <span className="menu-sub">A blade that hums near magic</span>
+          </div>
+        </li>
+        <li>
+          <div className="menu-link">
+            <span className="menu-label">Towerbread Rations</span>
+            <span className="menu-chev">×4</span>
+            <span className="menu-sub">Restores a little stamina</span>
+          </div>
+        </li>
+        <li>
+          <div className="menu-link">
+            <span className="menu-label">Flask of Insight</span>
+            <span className="menu-chev">×2</span>
+            <span className="menu-sub">Reveals hidden runes</span>
+          </div>
+        </li>
+        <li>
+          <div className="menu-link">
+            <span className="menu-label">Hookshot</span>
+            <span className="menu-chev">?</span>
+            <span className="menu-sub">Traverse chasms and traps</span>
+          </div>
+        </li>
+      </ul>
+    </div>
+  );
+}
+
+function CharacterPanel({ meters, titleId }: { meters: GaugeValue[]; titleId?: string }) {
+  return (
+    <div className="menu-panel" aria-label="Character Sheet">
+      <div className="panel-title" id={titleId}>
+        Character
+      </div>
+      <CompactMeterGroup meters={meters} />
+      <div style={{ display: "grid", gap: 10 }}>
+        <PanelRow label="Level" value="27" />
+        <PanelRow label="XP" value="83,234 / 90,000" />
+        <PanelRow label="Lifetime Climbs" value="42" />
+        <PanelRow label="Highest Clear" value="Floor 7" />
+        <div>
+          <strong>Skills</strong>
+          <div style={{ color: "var(--color-muted)" }}>
+            Riposte III, Rune Sight II, Iron Will IV, Fleetfoot II
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function PanelRow({ label, value }: { label: string; value: string }) {
+  return (
+    <div style={{ display: "flex", justifyContent: "space-between" }}>
+      <strong>{label}</strong>
+      <span>{value}</span>
+    </div>
+  );
+}
+
+function CombatActionSheet() {
+  const encounter = useCombatStore((state) => state.encounter);
+  const commitDecision = useCombatStore((state) => state.commitPlayerDecision);
+  const activeSide = useCombatStore((state) => state.getActiveSide());
+
+  if (!encounter) {
+    return (
+      <div className="menu-panel" aria-live="polite">
+        <div className="panel-title">Combat</div>
+        <p style={{ color: "var(--color-muted)", margin: 0 }}>No active encounter.</p>
+      </div>
+    );
+  }
+
+  const entities = Object.values(encounter.entities);
+  const player = entities.find((entity) => entity.faction === "player");
+  const enemies = entities.filter((entity) => entity.faction === "enemy" && entity.alive);
+  const targetId = enemies[0]?.id;
+  const canAct = !!player && !!targetId && activeSide === "player";
+
+  const actions = player?.actions ?? [];
+
+  return (
+    <div className="menu-panel" aria-live="polite">
+      <div className="panel-title" id="combat-sheet-title">
+        Combat Options
+      </div>
+      {actions.length === 0 ? (
+        <p style={{ color: "var(--color-muted)", margin: 0 }}>Awaiting new tactics...</p>
+      ) : (
+        <div style={{ display: "grid", gap: 8 }}>
+          {actions.map((action) => (
+            <button
+              key={action.contract.id}
+              className="btn btn--ghost"
+              disabled={!canAct}
+              onClick={() => {
+                if (!canAct || !targetId) return;
+                commitDecision({
+                  actionId: action.contract.id,
+                  targetIds: [targetId],
+                  boosterOutcome: "good",
+                });
+              }}
+            >
+              <strong>{action.contract.name}</strong>
+              <div style={{ fontSize: 12, opacity: 0.7 }}>{action.contract.category}</div>
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
 
 function FinalExtract({ onExtract }: { onExtract: () => void }) {
   return (
@@ -428,10 +558,11 @@ function FinalExtract({ onExtract }: { onExtract: () => void }) {
       aria-modal={false}
       aria-label="Final extraction"
       style={{
-        border: "1px solid rgba(255,255,255,0.15)",
-        borderRadius: 12,
-        background: "rgba(0,0,0,0.5)",
-        padding: 14,
+        border: "1px solid rgba(255,255,255,0.14)",
+        borderRadius: 18,
+        background: "rgba(18,14,28,0.58)",
+        backdropFilter: "blur(16px)",
+        padding: 16,
         display: "grid",
         gap: 10,
       }}
@@ -450,7 +581,40 @@ function FinalExtract({ onExtract }: { onExtract: () => void }) {
   );
 }
 
-function MapPanel({ onClose }: { onClose: () => void }) {
+function JournalPanel({ titleId }: { titleId?: string }) {
+  return (
+    <div className="menu-panel" aria-label="Journal" style={{ minHeight: 260 }}>
+      <div className="panel-title" id={titleId}>
+        Journal
+      </div>
+      <ul className="menu-list">
+        <li>
+          <div className="menu-link">
+            <span className="menu-label">Objective: Reach Floor 5</span>
+            <span className="menu-chev">•</span>
+            <span className="menu-sub">The guild awaits your report</span>
+          </div>
+        </li>
+        <li>
+          <div className="menu-link">
+            <span className="menu-label">Rumor: Hidden Librarium</span>
+            <span className="menu-chev">•</span>
+            <span className="menu-sub">A tome on Runic Binding exists</span>
+          </div>
+        </li>
+        <li>
+          <div className="menu-link">
+            <span className="menu-label">Lore: The Brass Wardens</span>
+            <span className="menu-chev">•</span>
+            <span className="menu-sub">Order that guards the 5th ascent</span>
+          </div>
+        </li>
+      </ul>
+    </div>
+  );
+}
+
+function MapPanel({ onClose, titleId }: { onClose?: () => void; titleId?: string }) {
   const grid = useRunStore((s) => s.grid);
   const journal = useRunStore((s) => s.journal);
   const pos = useRunStore((s) => s.playerPos);
@@ -469,15 +633,30 @@ function MapPanel({ onClose }: { onClose: () => void }) {
       aria-label="Floor map"
       aria-modal={false}
       style={{
-        border: "1px solid rgba(255,255,255,0.15)",
-        borderRadius: 12,
-        background: "rgba(0,0,0,0.45)",
-        padding: 12,
+        border: "1px solid rgba(255,255,255,0.12)",
+        borderRadius: 18,
+        background: "rgba(18,14,28,0.55)",
+        backdropFilter: "blur(14px)",
+        padding: 16,
       }}
     >
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
-        <strong>Map</strong>
-        <button className="hide-desktop" onClick={onClose} aria-label="Close map" style={{ padding: "6px 10px", borderRadius: 8, border: "1px solid rgba(255,255,255,0.15)", background: "rgba(255,255,255,0.08)" }}>Close</button>
+        <strong id={titleId}>Map</strong>
+        {onClose && (
+          <button
+            className="hide-desktop"
+            onClick={onClose}
+            aria-label="Close map"
+            style={{
+              padding: "6px 10px",
+              borderRadius: 8,
+              border: "1px solid rgba(255,255,255,0.15)",
+              background: "rgba(255,255,255,0.08)",
+            }}
+          >
+            Close
+          </button>
+        )}
       </div>
       <div
         style={{

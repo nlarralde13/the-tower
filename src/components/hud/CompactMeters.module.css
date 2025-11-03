@@ -1,0 +1,88 @@
+.root {
+  display: grid;
+  gap: 8px;
+}
+
+.group {
+  display: grid;
+  gap: 6px;
+}
+
+.meterRow {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  align-items: center;
+  gap: 8px;
+}
+
+.iconCell {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  font-size: 0.8rem;
+}
+
+.meterShell {
+  position: relative;
+  min-width: 0;
+  height: clamp(20px, 2.6vh, 24px);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.08);
+  overflow: hidden;
+}
+
+.fill {
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  transform-origin: left center;
+  background: var(--meter-color, #e86a6a);
+  box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.4);
+  transition: transform 180ms ease;
+}
+
+.value {
+  position: relative;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: rgba(250, 247, 236, 0.92);
+  text-shadow: 0 0 6px rgba(0, 0, 0, 0.5);
+  padding: 0 8px;
+}
+
+.label {
+  font-size: 0.75rem;
+  text-transform: uppercase;
+  letter-spacing: 0.2em;
+  color: rgba(250, 247, 236, 0.64);
+}
+
+.meterHeader {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+@media (max-width: 600px) {
+  .label {
+    clip: rect(0 0 0 0);
+    clip-path: inset(50%);
+    height: 1px;
+    width: 1px;
+    overflow: hidden;
+    position: absolute;
+  }
+  .meterHeader {
+    position: absolute;
+  }
+}

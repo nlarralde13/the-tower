@@ -1,131 +1,156 @@
-﻿"use client";
+"use client";
 
-import React from "react";
+import { useCallback, useRef } from "react";
+import styles from "./ThumbBar.module.css";
+
+type Direction = "north" | "south" | "west" | "east";
 
 type ThumbBarProps = {
-  onMove: (dir: "north" | "south" | "west" | "east") => void;
-  onInspect?: () => void;
-  onUse?: () => void;
+  onMove: (dir: Direction) => void;
+  onInteract?: () => void;
+  onAttack?: () => void;
+  onSkill?: () => void;
+  onItem?: () => void;
   onDefend?: () => void;
-  onFlee?: () => void;
   onBack?: () => void;
   onAscend?: () => void;
   showAscend?: boolean;
+  mode?: "explore" | "combat";
   disabled?: boolean;
 };
 
 export default function ThumbBar({
   onMove,
-  onInspect,
-  onUse,
+  onInteract,
+  onAttack,
+  onSkill,
+  onItem,
   onDefend,
-  onFlee,
   onBack,
   onAscend,
   showAscend,
+  mode = "explore",
   disabled = false,
 }: ThumbBarProps) {
-  return (
-    <div
-      style={{
-        position: "sticky",
-        bottom: 0,
-        left: 0,
-        right: 0,
-        padding: 12,
-        display: "grid",
-        gridTemplateColumns: "1fr",
-        gap: 12,
-        background: "linear-gradient(180deg, rgba(0,0,0,0), rgba(0,0,0,0.6))",
-        backdropFilter: "blur(2px)",
-      }}
-    >
-      {showAscend && (
-        <BigButton
-          label="Ascend"
-          ariaLabel="Ascend to next floor"
-          onClick={onAscend}
-          disabled={disabled}
-        />
-      )}
-      {/* D-Pad */}
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 8, alignItems: "center", justifyItems: "center" }}>
-        <span />
-        <BigButton
-          label="North"
-          ariaLabel="Move north"
-          onClick={() => !disabled && onMove("north")}
-          disabled={disabled}
-        />
-        <span />
-        <BigButton
-          label="West"
-          ariaLabel="Move west"
-          onClick={() => !disabled && onMove("west")}
-          disabled={disabled}
-        />
-        <span />
-        <BigButton
-          label="East"
-          ariaLabel="Move east"
-          onClick={() => !disabled && onMove("east")}
-          disabled={disabled}
-        />
-        <span />
-        <BigButton
-          label="South"
-          ariaLabel="Move south"
-          onClick={() => !disabled && onMove("south")}
-          disabled={disabled}
-        />
-        <span />
-      </div>
+  const handleMove = useCallback(
+    (dir: Direction) => {
+      if (disabled) return;
+      onMove(dir);
+    },
+    [disabled, onMove]
+  );
 
-      {/* Actions Row */}
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(5, 1fr)", gap: 8 }}>
-        <BigButton label="Inspect" ariaLabel="Inspect" onClick={onInspect} disabled={disabled} />
-        <BigButton label="Use" ariaLabel="Use" onClick={onUse} disabled={disabled} />
-        <BigButton label="Defend" ariaLabel="Defend" onClick={onDefend} disabled={disabled} />
-        <BigButton label="Flee" ariaLabel="Flee" onClick={onFlee} disabled={disabled} />
-        <BigButton label="Back" ariaLabel="Back" onClick={onBack} disabled={disabled} />
+  return (
+    <div className={styles.container} role="group" aria-label="Movement and actions">
+      <div className={styles.inner}>
+        <div className={styles.cluster}>
+          {showAscend && (
+            <ActionButton
+              label="Ascend"
+              ariaLabel="Ascend to next floor"
+              onClick={onAscend}
+              disabled={disabled}
+            />
+          )}
+          <div className={styles.dpad} aria-label="Movement controls">
+            <span />
+            <ActionButton label="North" ariaLabel="Move north" onClick={() => handleMove("north")} disabled={disabled} />
+            <span />
+            <ActionButton label="West" ariaLabel="Move west" onClick={() => handleMove("west")} disabled={disabled} />
+            <span aria-hidden className={styles.dpadCenter} />
+            <ActionButton label="East" ariaLabel="Move east" onClick={() => handleMove("east")} disabled={disabled} />
+            <span />
+            <ActionButton label="South" ariaLabel="Move south" onClick={() => handleMove("south")} disabled={disabled} />
+            <span />
+          </div>
+        </div>
+
+        <div className={styles.cluster}>
+          {mode === "combat" ? (
+            <div className={styles.gridActions} aria-label="Combat actions">
+              <ActionButton label="Attack" ariaLabel="Attack" onClick={onAttack} disabled={disabled} onLongPress={onAttack} />
+              <ActionButton label="Skill" ariaLabel="Use skill" onClick={onSkill} disabled={disabled} onLongPress={onSkill} />
+              <ActionButton label="Item" ariaLabel="Use item" onClick={onItem} disabled={disabled} onLongPress={onItem} />
+              <ActionButton label="Defend" ariaLabel="Defend" onClick={onDefend} disabled={disabled} onLongPress={onDefend} />
+            </div>
+          ) : (
+            <div className={styles.interact}>
+              <ActionButton
+                label="Interact"
+                ariaLabel="Interact with the room"
+                onClick={onInteract}
+                disabled={disabled}
+                onLongPress={onInteract}
+              />
+            </div>
+          )}
+          <ActionButton label="Back" ariaLabel="Go back" onClick={onBack} disabled={disabled} />
+        </div>
       </div>
     </div>
   );
 }
 
-function BigButton({
+function ActionButton({
   label,
-  icon,
   ariaLabel,
   onClick,
-  disabled = false,
+  onLongPress,
+  disabled,
 }: {
   label: string;
-  icon?: string;
   ariaLabel: string;
   onClick?: () => void;
+  onLongPress?: () => void;
   disabled?: boolean;
 }) {
+  const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const didLongPressRef = useRef(false);
+
+  const clearTimer = () => {
+    if (timerRef.current) {
+      clearTimeout(timerRef.current);
+      timerRef.current = null;
+    }
+  };
+
+  const handlePointerDown = () => {
+    if (disabled || !onLongPress) return;
+    didLongPressRef.current = false;
+    clearTimer();
+    timerRef.current = window.setTimeout(() => {
+      didLongPressRef.current = true;
+      onLongPress();
+      clearTimer();
+    }, 500);
+  };
+
+  const handlePointerUp = () => {
+    clearTimer();
+  };
+
+  const handleClick = () => {
+    if (disabled) return;
+    if (didLongPressRef.current) {
+      didLongPressRef.current = false;
+      return;
+    }
+    onClick?.();
+  };
+
   return (
     <button
-      onClick={onClick}
+      type="button"
+      className={styles.button}
       aria-label={ariaLabel}
+      onClick={handleClick}
+      onPointerDown={handlePointerDown}
+      onPointerUp={handlePointerUp}
+      onPointerLeave={handlePointerUp}
+      onPointerCancel={handlePointerUp}
       disabled={disabled}
-      style={{
-        width: "100%",
-        minHeight: 56,
-        padding: "10px 12px",
-        borderRadius: 12,
-        border: "1px solid rgba(255,255,255,0.15)",
-        background: "rgba(255,255,255,0.08)",
-        color: "inherit",
-        fontSize: 16,
-        opacity: disabled ? 0.6 : 1,
-        cursor: disabled ? "not-allowed" : "pointer",
-      }}
     >
-      {icon && <span style={{ marginRight: 8 }}>{icon}</span>}
-      {label}
+      <span className={styles.labelPrimary}>{label}</span>
     </button>
   );
 }

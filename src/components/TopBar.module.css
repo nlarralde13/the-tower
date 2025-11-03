@@ -1,133 +1,112 @@
 /* components/TopBar.module.css */
 
 :root {
-  --bar-height: 56px;                 /* mobile thumb target */
-  --glass: rgba(12, 10, 18, 0.82);
-  --line: rgba(210, 196, 166, 0.18);
-  --ink: #f4eed7;
-
-  /* HUD accent colors */
-  --hp: #e86a6a;
-  --mp: #5aa5ff;
-  --st: #f4c95d;
+  --topbar-height: 60px;
+  --topbar-safe-top: env(safe-area-inset-top, 0px);
+  --topbar-ink: #f4eed7;
+  --topbar-line: rgba(242, 232, 205, 0.22);
+  --topbar-glass: rgba(14, 12, 22, 0.38);
 }
 
 .bar {
-  position: sticky;
-  top: 0;
-  z-index: 50;
-  height: var(--bar-height);
+  position: fixed;
+  inset: 0 0 auto;
+  z-index: 90;
   display: grid;
   grid-template-columns: auto 1fr auto;
   align-items: center;
-  gap: 12px;
-  padding: 0 12px;
-  background: linear-gradient(180deg, rgba(12,10,18,0.94), rgba(9,8,14,0.92));
-  border-bottom: 1px solid var(--line);
-  box-shadow: 0 4px 18px rgba(0,0,0,0.4);
-  backdrop-filter: blur(6px);
+  gap: 16px;
+  padding: calc(10px + var(--topbar-safe-top)) clamp(14px, 4vw, 28px) 10px;
+  backdrop-filter: blur(16px);
+  background: linear-gradient(180deg, rgba(8, 6, 14, 0.05), var(--topbar-glass));
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+  color: var(--topbar-ink);
+  pointer-events: none;
 }
 
-/* Burger button */
 .burger {
   width: 44px;
   height: 44px;
   display: grid;
   place-items: center;
-  background: transparent;
-  border: 1px solid rgba(220, 204, 165, 0.18);
-  border-radius: 10px;
+  border-radius: 12px;
+  border: 1px solid rgba(244, 238, 215, 0.22);
+  background: rgba(14, 12, 22, 0.45);
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.05);
   cursor: pointer;
+  pointer-events: auto;
+  transition: background 160ms ease, border-color 160ms ease;
 }
+
 .burger:focus-visible {
-  outline: 2px solid rgba(225, 205, 160, 0.75);
-  outline-offset: 2px;
+  outline: 2px solid rgba(244, 238, 215, 0.6);
+  outline-offset: 3px;
 }
+
 .burger span {
   display: block;
   width: 18px;
   height: 2px;
-  background: var(--ink);
   border-radius: 2px;
+  background: currentColor;
   transition: transform 160ms ease, opacity 160ms ease;
 }
-.burger span + span { margin-top: 4px; }
-.burgerOpen span:nth-child(1) { transform: translateY(6px) rotate(45deg); }
-.burgerOpen span:nth-child(2) { opacity: 0; }
-.burgerOpen span:nth-child(3) { transform: translateY(-6px) rotate(-45deg); }
 
-/* HUD meters container */
-.hud {
-  display: grid;
-  grid-auto-flow: column;
-  align-items: center;
+.burger span + span {
+  margin-top: 4px;
+}
+
+.burgerOpen span:nth-child(1) {
+  transform: translateY(6px) rotate(45deg);
+}
+
+.burgerOpen span:nth-child(2) {
+  opacity: 0;
+}
+
+.burgerOpen span:nth-child(3) {
+  transform: translateY(-6px) rotate(-45deg);
+}
+
+.floorBadge {
+  display: inline-flex;
+  align-items: baseline;
   gap: 10px;
-  overflow: hidden;
-  min-width: 0;
-}
-
-/* Right spacer (future icons) */
-.rightSpacer { width: 8px; }
-
-/* Meter */
-.meter {
-  min-width: 0;
-  display: grid;
-  grid-template-columns: auto 1fr auto;
-  align-items: center;
-  gap: 8px;
-  color: var(--ink);
-}
-.meterHeader { display: grid; grid-auto-flow: column; gap: 6px; }
-.meterIcon { font-size: 14px; line-height: 1; }
-.meterLabel {
-  font-size: 11px;
-  text-transform: uppercase;
-  letter-spacing: 0.14em;
-  color: rgba(244,238,215,0.72);
-}
-.meterBar {
-  position: relative;
-  height: 12px;
-  border-radius: 999px;
-  background: rgba(255,255,255,0.08);
-  overflow: hidden;
-  min-width: 60px;
-}
-.meterFill {
-  height: 100%;
-  border-radius: 999px;
-  background: var(--hp);
-  box-shadow: 0 0 10px rgba(0,0,0,0.25) inset;
-  transition: width 180ms ease;
-}
-.meter[data-color="--mp"] .meterFill { background: var(--mp); }
-.meter[data-color="--st"] .meterFill { background: var(--st); }
-
-.meterText {
-  position: absolute;
-  inset: 0;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 8px;
+  padding: 10px 16px;
+  border-radius: 18px;
+  border: 1px solid rgba(244, 238, 215, 0.18);
+  background: rgba(14, 12, 22, 0.35);
+  font-family: "DM Mono", "SFMono-Regular", Menlo, Consolas, monospace;
   font-weight: 600;
-  color: #fff;  /* or use rgba(255,255,255,0.9) for softer */
-  text-shadow: 0 0 3px rgba(0,0,0,0.7);
-  pointer-events: none; /* so touches still register on bar if needed */
+  letter-spacing: 0.08em;
+  pointer-events: auto;
 }
 
+.floorLabel {
+  text-transform: uppercase;
+  font-size: 0.65rem;
+  opacity: 0.72;
+}
 
-/* Drawer + scrim */
+.floorValue {
+  font-size: clamp(1rem, 2.4vw, 1.4rem);
+}
+
+.rightSpacer {
+  width: 40px;
+  pointer-events: none;
+}
+
 .scrim {
   position: fixed;
   inset: 0;
-  background: rgba(0,0,0,0.35);
+  background: rgba(2, 0, 6, 0.45);
   opacity: 0;
   pointer-events: none;
-  transition: opacity 160ms ease;
-  z-index: 49;
+  transition: opacity 200ms ease;
+  z-index: 60;
 }
+
 .scrimVisible {
   opacity: 1;
   pointer-events: auto;
@@ -135,86 +114,96 @@
 
 .drawer {
   position: fixed;
-  top: 0;
-  left: 0;
-  height: 100dvh;
-  width: min(84vw, 320px);
-  background: rgba(18, 16, 26, 0.96);
-  border-right: 1px solid var(--line);
-  box-shadow: 0 10px 30px rgba(0,0,0,0.5);
-  transform: translateX(-100%);
-  transition: transform 180ms ease;
-  z-index: 50;
+  inset: 0 auto 0 0;
+  width: min(82vw, 320px);
+  background: rgba(12, 10, 20, 0.88);
+  border-right: 1px solid rgba(244, 238, 215, 0.12);
+  box-shadow: 0 18px 42px rgba(0, 0, 0, 0.5);
+  transform: translateX(-105%);
+  transition: transform 220ms cubic-bezier(0.32, 0.72, 0, 1);
+  z-index: 70;
   display: grid;
   grid-template-rows: auto 1fr;
+  backdrop-filter: blur(16px);
 }
-.drawerOpen { transform: translateX(0); }
+
+.drawerOpen {
+  transform: translateX(0);
+}
 
 .drawerHeader {
   display: grid;
   grid-template-columns: auto 1fr;
-  gap: 12px;
   align-items: center;
-  padding: 14px 14px 12px;
-  border-bottom: 1px solid var(--line);
-  color: var(--ink);
+  gap: 12px;
+  padding: calc(18px + var(--topbar-safe-top)) 18px 16px;
+  border-bottom: 1px solid rgba(244, 238, 215, 0.1);
+  color: var(--topbar-ink);
 }
+
 .brandDot {
-  width: 36px;
-  height: 36px;
+  width: 40px;
+  height: 40px;
+  border-radius: 20px;
   display: grid;
   place-items: center;
-  border-radius: 50%;
-  background: radial-gradient(120% 120% at 30% 30%, #f3e5b0 18%, #8e7b44 60%, #1c160e 100%);
-  color: #130d07;
+  background: radial-gradient(120% 120% at 30% 30%, #f5e3a7 14%, #8e7b44 60%, #1c160e 100%);
+  color: #120d07;
   font-weight: 800;
-  box-shadow: 0 0 12px rgba(243, 229, 176, 0.28);
+  letter-spacing: 0.08em;
 }
-.brandCopy { display: grid; min-width: 0; }
-.brandTitle { font-weight: 700; letter-spacing: 0.02em; }
+
+.brandCopy {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+}
+
+.brandTitle {
+  font-weight: 700;
+  letter-spacing: 0.04em;
+}
+
 .brandSubtitle {
-  font-size: 11px;
+  font-size: 0.7rem;
   text-transform: uppercase;
-  letter-spacing: 0.14em;
-  color: rgba(244, 238, 215, 0.62);
+  letter-spacing: 0.2em;
+  opacity: 0.72;
 }
 
 .menuList {
   list-style: none;
   margin: 0;
-  padding: 8px 8px 16px;
+  padding: 16px 12px 24px;
   display: grid;
-  gap: 2px;
+  gap: 6px;
+  color: var(--topbar-ink);
 }
+
 .menuLink {
   display: block;
-  padding: 12px 12px;
-  color: var(--ink);
-  text-decoration: none;
-  border-radius: 10px;
+  padding: 12px 14px;
+  border-radius: 12px;
   border: 1px solid transparent;
+  color: inherit;
+  text-decoration: none;
+  transition: background 160ms ease, border-color 160ms ease;
 }
-.menuLink:hover {
-  background: rgba(244, 238, 215, 0.06);
-  border-color: rgba(220, 204, 165, 0.14);
+
+.menuLink:hover,
+.menuLink:focus-visible {
+  background: rgba(244, 238, 215, 0.08);
+  border-color: rgba(244, 238, 215, 0.16);
+  outline: none;
 }
+
+.rule {
+  height: 1px;
+  background: linear-gradient(90deg, transparent, rgba(244, 238, 215, 0.3), transparent);
+  margin: 12px 10px;
+}
+
 .menuLink:focus-visible {
   outline: 2px solid rgba(225, 205, 160, 0.75);
   outline-offset: 2px;
-}
-.rule {
-  height: 1px;
-  margin: 8px 6px;
-  background: var(--line);
-  border-radius: 1px;
-}
-
-/* Responsive polish */
-@media (min-width: 480px) {
-  .meterBar { min-width: 44px; }
-}
-@media (min-width: 720px) {
-  .bar { --bar-height: 64px; padding: 0 16px; }
-  .meterLabel { font-size: 12px; }
-  .meterText { font-size: 13px; }
 }
