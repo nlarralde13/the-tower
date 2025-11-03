@@ -10,7 +10,7 @@ const slash: ActionContract = {
   targeting: { type: "singleEnemy" },
   booster: "precision",
   power: {
-    base: 24,
+    base: 2,
     variance: 0.1,
     critMult: 1.5,
   },

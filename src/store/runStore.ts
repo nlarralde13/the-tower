@@ -57,6 +57,7 @@ export type RunState = {
     encounterSerial: number;
   } | null;
   roomRewards: Record<string, RoomRewardRecord>;
+  defeatOverlay: boolean;
   dev: {
     gridOverlay: boolean;
   };
@@ -348,6 +349,7 @@ export const useRunStore = create<RunState & RunActions>((set, get) => ({
   journal: [],
   completedRooms: {},
   roomRewards: {},
+  defeatOverlay: false,
   activeCombat: null,
   dev: { gridOverlay: false },
 
@@ -365,13 +367,14 @@ export const useRunStore = create<RunState & RunActions>((set, get) => ({
         grid: parsed.grid ?? null,
         playerPos: parsed.playerPos ?? null,
         mode: parsed.mode === "combat" ? "explore" : parsed.mode ?? "explore",
-        sceneId: parsed.sceneId ?? null,
-        pools: parsed.pools ?? initialPools(),
-        journal: parsed.journal ?? [],
-        completedRooms: parsed.completedRooms ?? {},
-        roomRewards: parsed.roomRewards ?? {},
-        activeCombat: null,
-        dev: parsed.dev ?? { gridOverlay: false },
+      sceneId: parsed.sceneId ?? null,
+      pools: parsed.pools ?? initialPools(),
+      journal: parsed.journal ?? [],
+      completedRooms: parsed.completedRooms ?? {},
+      roomRewards: parsed.roomRewards ?? {},
+      defeatOverlay: parsed.defeatOverlay ?? false,
+      activeCombat: null,
+      dev: parsed.dev ?? { gridOverlay: false },
       }));
       const combatState = useCombatStore.getState();
       if (combatState.endEncounter) {
@@ -455,13 +458,14 @@ export const useRunStore = create<RunState & RunActions>((set, get) => ({
       sceneId: path,
       pools,
       journal: [
-        { t: Date.now(), floor, x: playerPos.x, y: playerPos.y, type: "entry", scene: path },
-      ],
-      completedRooms: {},
-      roomRewards: {},
-      activeCombat: null,
-      dev: { gridOverlay: false },
-    };
+    { t: Date.now(), floor, x: playerPos.x, y: playerPos.y, type: "entry", scene: path },
+  ],
+  completedRooms: {},
+  roomRewards: {},
+  defeatOverlay: false,
+  activeCombat: null,
+  dev: { gridOverlay: false },
+};
     set(() => newState);
     if (typeof window !== "undefined") localStorage.setItem(STORAGE_KEY, JSON.stringify(newState));
   },
@@ -476,7 +480,7 @@ export const useRunStore = create<RunState & RunActions>((set, get) => ({
 
   move: (dir) => {
     const s = get();
-    if (s.mode === "combat") return;
+    if (s.mode === "combat" || s.defeatOverlay) return;
     const grid = s.grid;
     const pos = s.playerPos;
     if (!grid || !pos) return;
@@ -653,6 +657,7 @@ export const useRunStore = create<RunState & RunActions>((set, get) => ({
       mode: "explore",
       activeCombat: null,
       journal,
+      defeatOverlay: victory ? false : true,
     };
 
     if (rewardRecord) {
@@ -705,14 +710,15 @@ export const useRunStore = create<RunState & RunActions>((set, get) => ({
       mode: "explore",
       sceneId: path,
       pools,
-      journal: [
-        { t: Date.now(), floor, x: playerPos.x, y: playerPos.y, type: "entry", scene: path },
-      ],
-      completedRooms: {},
-      roomRewards: {},
-      activeCombat: null,
-      dev: { gridOverlay: get().dev.gridOverlay },
-    };
+  journal: [
+    { t: Date.now(), floor, x: playerPos.x, y: playerPos.y, type: "entry", scene: path },
+  ],
+  completedRooms: {},
+  roomRewards: {},
+  defeatOverlay: false,
+  activeCombat: null,
+  dev: { gridOverlay: get().dev.gridOverlay },
+};
     set(() => newState);
     if (typeof window !== "undefined") localStorage.setItem(STORAGE_KEY, JSON.stringify(newState));
   },
@@ -779,11 +785,12 @@ export const useRunStore = create<RunState & RunActions>((set, get) => ({
       grid: newGrid,
       playerPos,
       mode: "explore",
-      sceneId: path,
-      pools,
-      journal: [...(s.journal ?? []), { t: Date.now(), floor: nextFloor, x: playerPos.x, y: playerPos.y, type: "entry", scene: path }],
-      activeCombat: null,
-    };
+    sceneId: path,
+    pools,
+    journal: [...(s.journal ?? []), { t: Date.now(), floor: nextFloor, x: playerPos.x, y: playerPos.y, type: "entry", scene: path }],
+    activeCombat: null,
+    defeatOverlay: false,
+  };
     set((prev) => ({ ...prev, ...newState }));
     if (typeof window !== "undefined") {
       localStorage.setItem(STORAGE_KEY, JSON.stringify({ ...get() }));
@@ -805,13 +812,14 @@ export const useRunStore = create<RunState & RunActions>((set, get) => ({
       playerPos: null,
       mode: "explore",
       sceneId: null,
-      pools: initialPools(),
-      journal: [],
-      completedRooms: {},
-      roomRewards: {},
-      activeCombat: null,
-      dev: { gridOverlay: false },
-    };
+    pools: initialPools(),
+    journal: [],
+    completedRooms: {},
+    roomRewards: {},
+    defeatOverlay: false,
+    activeCombat: null,
+    dev: { gridOverlay: false },
+  };
     set(() => cleared);
     if (typeof window !== "undefined") localStorage.setItem(STORAGE_KEY, JSON.stringify(cleared));
   },

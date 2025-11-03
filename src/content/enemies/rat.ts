@@ -5,8 +5,8 @@ const rat: EnemyContract = {
   name: "Dungeon Rat",
   archetype: "Aggressive",
   stats: {
-    HP: 400,
-    ATK: 32,
+    HP: 25,
+    ATK: 2,
     DEF: 8,
     INT: 6,
     RES: 6,
