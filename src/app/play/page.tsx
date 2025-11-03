@@ -303,7 +303,15 @@ export default function PlayPage() {
           {atFinalExit && (
             <FinalExtract onExtract={() => { endRun?.(); router.push("/climb"); }} />
           )}
-          {!atFinalExit && <JournalPanel />}
+          <div className="show-desktop" style={{ display: "flex", justifyContent: "flex-end" }}>
+            <button
+              className="btn btn--ghost"
+              onClick={handleToggleDrawer("journal")}
+              aria-label="Open journal drawer"
+            >
+              Open Journal
+            </button>
+          </div>
         </div>
 
         {/* Mobile & responsive drawers */}
@@ -328,16 +336,29 @@ export default function PlayPage() {
           <MapPanel onClose={handleCloseDrawer("map")} titleId="map-drawer-title" />
         </SlideDrawer>
 
-        <SlideDrawer
-          id="journal-drawer"
-          side="bottom"
-          variant="journal"
-          open={journalOpen}
-          onClose={handleCloseDrawer("journal")}
-          labelledBy="journal-drawer-title"
-        >
-          <JournalPanel titleId="journal-drawer-title" />
-        </SlideDrawer>
+        <div className="hide-desktop">
+          <SlideDrawer
+            id="journal-drawer-mobile"
+            side="bottom"
+            variant="journal"
+            open={journalOpen}
+            onClose={handleCloseDrawer("journal")}
+            labelledBy="journal-drawer-title"
+          >
+            <JournalPanel titleId="journal-drawer-title" />
+          </SlideDrawer>
+        </div>
+        <div className="show-desktop">
+          <SlideDrawer
+            id="journal-drawer-desktop"
+            side="right"
+            open={journalOpen}
+            onClose={handleCloseDrawer("journal")}
+            labelledBy="journal-drawer-title"
+          >
+            <JournalPanel titleId="journal-drawer-title" />
+          </SlideDrawer>
+        </div>
 
         <SlideDrawer
           id="combat-sheet"
@@ -582,46 +603,218 @@ function FinalExtract({ onExtract }: { onExtract: () => void }) {
 }
 
 function JournalPanel({ titleId }: { titleId?: string }) {
+  const runLog = useRunStore((s) => s.runLog);
+  const combatLog = useRunStore((s) => s.combatLog);
+  const combatBuffer = useRunStore((s) => s.combatLogBuffer);
+  const [activeTab, setActiveTab] = useState<"run" | "combat">("run");
+  const [runFilter, setRunFilter] = useState<"all" | "combat" | "loot" | "movement">("all");
+  const [expandedRun, setExpandedRun] = useState<string | null>(null);
+  const [expandedCombat, setExpandedCombat] = useState<string | null>(null);
+
+  const sortedRunLog = useMemo(() => {
+    return [...(runLog ?? [])].sort((a, b) => a.t - b.t);
+  }, [runLog]);
+
+  const filteredRunLog = useMemo(() => {
+    if (runFilter === "all") return sortedRunLog;
+    return sortedRunLog.filter((entry) => entry.category === runFilter);
+  }, [sortedRunLog, runFilter]);
+
+  const combinedCombatLog = useMemo(() => {
+    const combined = [...(combatLog ?? []), ...(combatBuffer ?? [])];
+    return combined.sort((a, b) => a.t - b.t);
+  }, [combatLog, combatBuffer]);
+
+  const renderMeta = (floor?: number, location?: { x: number; y: number }, tag?: string) => {
+    const parts: string[] = [];
+    if (typeof floor === "number" && floor > 0) parts.push(`Floor ${floor}`);
+    if (location) parts.push(`(${location.x},${location.y})`);
+    if (tag) parts.push(tag);
+    return parts.join(" • ");
+  };
+
+  const filterOptions: { id: typeof runFilter; label: string }[] = [
+    { id: "all", label: "All" },
+    { id: "combat", label: "Combat" },
+    { id: "loot", label: "Loot" },
+    { id: "movement", label: "Movement" },
+  ];
+
   return (
     <div className="menu-panel" aria-label="Journal" style={{ minHeight: 260 }}>
       <div className="panel-title" id={titleId}>
         Journal
       </div>
-      <ul className="menu-list">
-        <li>
-          <div className="menu-link">
-            <span className="menu-label">Objective: Reach Floor 5</span>
-            <span className="menu-chev">•</span>
-            <span className="menu-sub">The guild awaits your report</span>
-          </div>
-        </li>
-        <li>
-          <div className="menu-link">
-            <span className="menu-label">Rumor: Hidden Librarium</span>
-            <span className="menu-chev">•</span>
-            <span className="menu-sub">A tome on Runic Binding exists</span>
-          </div>
-        </li>
-        <li>
-          <div className="menu-link">
-            <span className="menu-label">Lore: The Brass Wardens</span>
-            <span className="menu-chev">•</span>
-            <span className="menu-sub">Order that guards the 5th ascent</span>
-          </div>
-        </li>
-      </ul>
+      <div style={{ display: "flex", gap: 8, marginBottom: 12 }}>
+        <button
+          type="button"
+          onClick={() => setActiveTab("run")}
+          className="btn btn--ghost"
+          style={{
+            flex: 1,
+            border: activeTab === "run" ? "1px solid rgba(255,255,255,0.4)" : undefined,
+            background: activeTab === "run" ? "rgba(255,255,255,0.12)" : "transparent",
+          }}
+        >
+          Run Log
+        </button>
+        <button
+          type="button"
+          onClick={() => setActiveTab("combat")}
+          className="btn btn--ghost"
+          style={{
+            flex: 1,
+            border: activeTab === "combat" ? "1px solid rgba(255,255,255,0.4)" : undefined,
+            background: activeTab === "combat" ? "rgba(255,255,255,0.12)" : "transparent",
+          }}
+        >
+          Combat Log
+        </button>
+      </div>
+
+      {activeTab === "run" && (
+        <div style={{ display: "flex", gap: 6, marginBottom: 10, flexWrap: "wrap" }}>
+          {filterOptions.map((opt) => (
+            <button
+              key={opt.id}
+              type="button"
+              onClick={() => setRunFilter(opt.id)}
+              className="btn btn--ghost"
+              style={{
+                flex: "1 1 auto",
+                minWidth: 80,
+                border: runFilter === opt.id ? "1px solid rgba(255,255,255,0.35)" : "1px solid rgba(255,255,255,0.12)",
+                background: runFilter === opt.id ? "rgba(255,255,255,0.1)" : "rgba(255,255,255,0.04)",
+              }}
+            >
+              {opt.label}
+            </button>
+          ))}
+        </div>
+      )}
+
+      <div style={{ maxHeight: 320, overflowY: "auto", paddingRight: 4 }}>
+        {activeTab === "run" ? (
+          filteredRunLog.length === 0 ? (
+            <p style={{ color: "var(--color-muted)", margin: 0 }}>No run events recorded yet.</p>
+          ) : (
+            <ul style={{ listStyle: "none", margin: 0, padding: 0, display: "grid", gap: 8 }}>
+              {filteredRunLog.map((entry) => {
+                const expanded = expandedRun === entry.id;
+                const meta = renderMeta(
+                  entry.floor,
+                  entry.location,
+                  entry.category.charAt(0).toUpperCase() + entry.category.slice(1)
+                );
+                return (
+                  <li key={entry.id}>
+                    <button
+                      type="button"
+                      onClick={() => setExpandedRun(expanded ? null : entry.id)}
+                      className="menu-link"
+                      style={{
+                        width: "100%",
+                        borderRadius: 12,
+                        border: "1px solid rgba(255,255,255,0.12)",
+                        background: expanded
+                          ? "rgba(255,255,255,0.1)"
+                          : "rgba(255,255,255,0.04)",
+                        textAlign: "left",
+                        padding: "10px 12px",
+                        display: "grid",
+                        gap: 4,
+                      }}
+                      aria-expanded={expanded}
+                    >
+                      <span
+                        style={{
+                          fontWeight: 600,
+                          whiteSpace: expanded ? "normal" : "nowrap",
+                          overflow: expanded ? "visible" : "hidden",
+                          textOverflow: expanded ? "clip" : "ellipsis",
+                        }}
+                        title={entry.message}
+                      >
+                        {entry.message}
+                      </span>
+                      {meta && (
+                        <span style={{ fontSize: 12, opacity: 0.7 }}>{meta}</span>
+                      )}
+                    </button>
+                  </li>
+                );
+              })}
+            </ul>
+          )
+        ) : combinedCombatLog.length === 0 ? (
+          <p style={{ color: "var(--color-muted)", margin: 0 }}>No combat events recorded yet.</p>
+        ) : (
+          <ul style={{ listStyle: "none", margin: 0, padding: 0, display: "grid", gap: 8 }}>
+            {combinedCombatLog.map((entry) => {
+              const expanded = expandedCombat === entry.id;
+              const tagLabel = entry.tag
+                ? entry.tag.charAt(0).toUpperCase() + entry.tag.slice(1)
+                : undefined;
+              const meta = renderMeta(entry.floor, entry.location, tagLabel);
+              return (
+                <li key={entry.id}>
+                  <button
+                    type="button"
+                    onClick={() => setExpandedCombat(expanded ? null : entry.id)}
+                    className="menu-link"
+                    style={{
+                      width: "100%",
+                      borderRadius: 12,
+                      border: "1px solid rgba(255,255,255,0.12)",
+                      background: expanded
+                        ? "rgba(255,255,255,0.1)"
+                        : "rgba(255,255,255,0.04)",
+                      textAlign: "left",
+                      padding: "10px 12px",
+                      display: "grid",
+                      gap: 4,
+                    }}
+                    aria-expanded={expanded}
+                  >
+                    <span
+                      style={{
+                        fontWeight: 600,
+                        whiteSpace: expanded ? "normal" : "nowrap",
+                        overflow: expanded ? "visible" : "hidden",
+                        textOverflow: expanded ? "clip" : "ellipsis",
+                      }}
+                      title={entry.message}
+                    >
+                      {entry.message}
+                    </span>
+                    {meta && (
+                      <span style={{ fontSize: 12, opacity: 0.7 }}>{meta}</span>
+                    )}
+                  </button>
+                </li>
+              );
+            })}
+          </ul>
+        )}
+      </div>
     </div>
   );
 }
 
 function MapPanel({ onClose, titleId }: { onClose?: () => void; titleId?: string }) {
   const grid = useRunStore((s) => s.grid);
-  const journal = useRunStore((s) => s.journal);
+  const visitedRooms = useRunStore((s) => s.visitedRooms);
   const pos = useRunStore((s) => s.playerPos);
   const currentFloor = useRunStore((s) => s.currentFloor);
   const visited = new Set<string>();
-  for (const e of journal ?? []) {
-    if (e.floor === currentFloor) visited.add(`${e.x},${e.y}`);
+  if (visitedRooms) {
+    for (const key of Object.keys(visitedRooms)) {
+      if (!visitedRooms[key]) continue;
+      const [floorPart, coords] = key.split(":");
+      if (Number(floorPart) === currentFloor && coords) {
+        visited.add(coords);
+      }
+    }
   }
   const W = grid?.width ?? 8;
   const H = grid?.height ?? 8;

@@ -17,23 +17,46 @@ type RunMode = "explore" | "combat";
 
 type ScenePools = Record<string, { remaining: string[]; last?: string }>;
 
-type JournalEntry = {
+export type RunLogCategory = "movement" | "combat" | "loot" | "status" | "system";
+
+export type RunLogEntry = {
+  id: string;
   t: number;
-  floor: number;
-  x: number;
-  y: number;
-  type: RoomType;
-  scene: string | null;
-  message?: string;
+  floor?: number;
+  location?: { x: number; y: number };
+  message: string;
+  category: RunLogCategory;
+  dedupeKey?: string;
 };
 
-type CombatLogEntry = {
+export type CombatLogTag = "hit" | "miss" | "crit" | "status" | "turn" | "system";
+
+export type CombatLogEntry = {
   id: string;
   t: number;
   encounterId: string;
-  floor: number;
+  floor?: number;
   location?: { x: number; y: number };
   message: string;
+  tag?: CombatLogTag;
+};
+
+type LogRunEventInput = {
+  message: string;
+  category: RunLogCategory;
+  floor?: number;
+  location?: { x: number; y: number };
+  dedupeKey?: string;
+  timestamp?: number;
+};
+
+type LogCombatEventInput = {
+  encounterId: string;
+  message: string;
+  floor?: number;
+  location?: { x: number; y: number };
+  tag?: CombatLogTag;
+  timestamp?: number;
 };
 
 export type RunState = {
@@ -46,9 +69,12 @@ export type RunState = {
   mode: RunMode;
   sceneId: string | null; // last shown scene path
   pools: ScenePools; // per-roomType pools for non-repeating selection
-  journal: JournalEntry[];
   completedRooms: Record<string, boolean>;
+  visitedRooms: Record<string, boolean>;
+  runLog: RunLogEntry[];
   combatLog: CombatLogEntry[];
+  combatLogBuffer: CombatLogEntry[];
+  combatLogEncounterId: string | null;
   activeCombat: {
     floor: number;
     x: number;
@@ -60,6 +86,7 @@ export type RunState = {
   dev: {
     gridOverlay: boolean;
   };
+  nextEncounterSerial: number;
 };
 
 type RunActions = {
@@ -72,15 +99,17 @@ type RunActions = {
   ascend?: () => Promise<void>;
   endRun?: () => void;
   completeCombat: (opts: { victory: boolean }) => void;
-  logCombatEvents: (payload: {
-    encounterId: string;
-    floor: number;
-    location?: { x: number; y: number };
-    lines: string[];
-  }) => void;
+  logRunEvent: (event: LogRunEventInput) => void;
+  logCombatEvent: (event: LogCombatEventInput) => void;
+  flushCombatToPersistent: () => void;
+  clearRunLogs: () => void;
 };
 
 const STORAGE_KEY = "runState:v1";
+
+const RUN_LOG_LIMIT = 200;
+const COMBAT_LOG_LIMIT = 400;
+const COMBAT_BUFFER_LIMIT = 160;
 
 function rand32(): number {
   if (typeof crypto !== "undefined" && "getRandomValues" in crypto) {
@@ -184,6 +213,43 @@ function formatList(items: string[]): string {
   const head = items.slice(0, -1).join(", ");
   const tail = items[items.length - 1];
   return `${head}, and ${tail}`;
+}
+
+function appendRunLog(list: RunLogEntry[], entry: RunLogEntry): RunLogEntry[] {
+  const last = list[list.length - 1];
+  if (
+    last &&
+    entry.dedupeKey &&
+    last.dedupeKey === entry.dedupeKey
+  ) {
+    return list;
+  }
+  if (
+    last &&
+    last.message === entry.message &&
+    last.category === entry.category &&
+    last.floor === entry.floor &&
+    (!last.location || !entry.location ||
+      (last.location.x === entry.location.x && last.location.y === entry.location.y))
+  ) {
+    return list;
+  }
+  const next = [...list, entry];
+  return next.length > RUN_LOG_LIMIT ? next.slice(-RUN_LOG_LIMIT) : next;
+}
+
+function appendCombatLog(list: CombatLogEntry[], entry: CombatLogEntry): CombatLogEntry[] {
+  const last = list[list.length - 1];
+  if (
+    last &&
+    last.message === entry.message &&
+    last.encounterId === entry.encounterId &&
+    last.tag === entry.tag
+  ) {
+    return list;
+  }
+  const next = [...list, entry];
+  return next.length > COMBAT_LOG_LIMIT ? next.slice(-COMBAT_LOG_LIMIT) : next;
 }
 
 function formatSourceBlurb(
@@ -326,11 +392,15 @@ export const useRunStore = create<RunState & RunActions>((set, get) => ({
   mode: "explore",
   sceneId: null,
   pools: initialPools(),
-  journal: [],
   completedRooms: {},
+  visitedRooms: {},
+  runLog: [],
   combatLog: [],
+  combatLogBuffer: [],
+  combatLogEncounterId: null,
   defeatOverlay: false,
   activeCombat: null,
+  nextEncounterSerial: 0,
   dev: { gridOverlay: false },
 
   resumeFromStorage: () => {
@@ -349,11 +419,15 @@ export const useRunStore = create<RunState & RunActions>((set, get) => ({
         mode: parsed.mode === "combat" ? "explore" : parsed.mode ?? "explore",
       sceneId: parsed.sceneId ?? null,
       pools: parsed.pools ?? initialPools(),
-      journal: parsed.journal ?? [],
       completedRooms: parsed.completedRooms ?? {},
+      visitedRooms: parsed.visitedRooms ?? {},
+      runLog: parsed.runLog ?? [],
       combatLog: parsed.combatLog ?? [],
+      combatLogBuffer: parsed.combatLogBuffer ?? [],
+      combatLogEncounterId: parsed.combatLogEncounterId ?? null,
       defeatOverlay: parsed.defeatOverlay ?? false,
       activeCombat: null,
+      nextEncounterSerial: parsed.nextEncounterSerial ?? 0,
       dev: parsed.dev ?? { gridOverlay: false },
       }));
       const combatState = useCombatStore.getState();
@@ -365,8 +439,122 @@ export const useRunStore = create<RunState & RunActions>((set, get) => ({
     }
   },
 
+  logRunEvent: ({ message, category, floor, location, dedupeKey, timestamp }) => {
+    const entry: RunLogEntry = {
+      id: `run:${Date.now().toString(36)}:${Math.random().toString(36).slice(2, 8)}`,
+      t: timestamp ?? Date.now(),
+      floor,
+      location: location ? { ...location } : undefined,
+      message,
+      category,
+      dedupeKey,
+    };
+    set((prev) => {
+      const runLog = appendRunLog(prev.runLog ?? [], entry);
+      if (typeof window !== "undefined") {
+        try {
+          const snapshot = { ...(prev as RunState), runLog };
+          localStorage.setItem(STORAGE_KEY, JSON.stringify(snapshot));
+        } catch {
+          // ignore persistence failures
+        }
+      }
+      return { runLog };
+    });
+  },
+
+  logCombatEvent: ({ encounterId, message, floor, location, tag, timestamp }) => {
+    const id = `${encounterId}:${Date.now().toString(36)}:${Math.random().toString(36).slice(2, 8)}`;
+    const entry: CombatLogEntry = {
+      id,
+      t: timestamp ?? Date.now(),
+      encounterId,
+      floor,
+      location: location ? { ...location } : undefined,
+      message,
+      tag,
+    };
+    set((prev) => {
+      const nextState: Partial<RunState> = {};
+      const bufferEncounter = prev.combatLogEncounterId;
+      let buffer = prev.combatLogBuffer ?? [];
+      let persisted = prev.combatLog ?? [];
+      if (bufferEncounter && bufferEncounter !== encounterId && buffer.length) {
+        for (const entry of buffer) {
+          persisted = appendCombatLog(persisted, entry);
+        }
+        buffer = [];
+      }
+      buffer = appendCombatLog(buffer, entry);
+      if (buffer.length > COMBAT_BUFFER_LIMIT) {
+        buffer = buffer.slice(-COMBAT_BUFFER_LIMIT);
+      }
+      nextState.combatLog = persisted;
+      nextState.combatLogBuffer = buffer;
+      nextState.combatLogEncounterId = encounterId;
+      if (typeof window !== "undefined") {
+        try {
+          const snapshot = {
+            ...(prev as RunState),
+            combatLog: nextState.combatLog,
+            combatLogBuffer: nextState.combatLogBuffer,
+            combatLogEncounterId: encounterId,
+          };
+          localStorage.setItem(STORAGE_KEY, JSON.stringify(snapshot));
+        } catch {
+          // ignore persistence failures
+        }
+      }
+      return nextState;
+    });
+  },
+
+  flushCombatToPersistent: () => {
+    set((prev) => {
+      let combined = prev.combatLog ?? [];
+      for (const entry of prev.combatLogBuffer ?? []) {
+        combined = appendCombatLog(combined, entry);
+      }
+      const nextState: Partial<RunState> = {
+        combatLog: combined,
+        combatLogBuffer: [],
+        combatLogEncounterId: null,
+      };
+      if (typeof window !== "undefined") {
+        try {
+          const snapshot = { ...(prev as RunState), ...nextState };
+          localStorage.setItem(STORAGE_KEY, JSON.stringify(snapshot));
+        } catch {
+          // ignore persistence failures
+        }
+      }
+      return nextState;
+    });
+  },
+
+  clearRunLogs: () => {
+    set((prev) => {
+      const nextState: Partial<RunState> = {
+        runLog: [],
+        combatLog: [],
+        combatLogBuffer: [],
+        combatLogEncounterId: null,
+      };
+      if (typeof window !== "undefined") {
+        try {
+          const snapshot = { ...(prev as RunState), ...nextState };
+          localStorage.setItem(STORAGE_KEY, JSON.stringify(snapshot));
+        } catch {
+          // ignore persistence failures
+        }
+      }
+      return nextState;
+    });
+  },
+
   enterRun: async () => {
     // Load ruleset and build floor 1
+    get().clearRunLogs();
     const runSeed = rand32();
     const floor = 1;
     let floorConfig: FloorConfig | null = null;
@@ -427,6 +615,8 @@ export const useRunStore = create<RunState & RunActions>((set, get) => ({
 
     const runId = `${Date.now().toString(36)}-${runSeed.toString(36)}`;
 
+    const entryKey = roomKey(floor, playerPos.x, playerPos.y);
+
     const newState: RunState = {
       runId,
       runSeed,
@@ -437,25 +627,32 @@ export const useRunStore = create<RunState & RunActions>((set, get) => ({
       mode: "explore",
       sceneId: path,
       pools,
-      journal: [
-        {
-          t: Date.now(),
-          floor,
-          x: playerPos.x,
-          y: playerPos.y,
-          type: "entry",
-          scene: path,
-          message: "Arrived on the floor.",
-        },
-      ],
+      visitedRooms: { [entryKey]: true },
+      runLog: [],
       combatLog: [],
+      combatLogBuffer: [],
+      combatLogEncounterId: null,
       completedRooms: {},
       defeatOverlay: false,
       activeCombat: null,
+      nextEncounterSerial: 0,
       dev: { gridOverlay: false },
     };
     set(() => newState);
     if (typeof window !== "undefined") localStorage.setItem(STORAGE_KEY, JSON.stringify(newState));
+
+    const { logRunEvent } = get();
+    logRunEvent({
+      message: "Filed a new climb dossier.",
+      category: "system",
+      floor,
+    });
+    logRunEvent({
+      message: "Entered the entryway.",
+      category: "movement",
+      floor,
+      location: { x: playerPos.x, y: playerPos.y },
+    });
   },
 
   roomTypeAt: (x, y) => {
@@ -488,43 +685,57 @@ export const useRunStore = create<RunState & RunActions>((set, get) => ({
     const target = grid.cells[idx(nx, ny, W)];
     if (target.type === "blocked") return;
 
-    const { path, pools } = drawFromPool(s.pools, target.type);
-    const entry: JournalEntry = {
-      t: Date.now(),
-      floor: s.currentFloor,
-      x: nx,
-      y: ny,
-      type: target.type,
-      scene: path,
-    };
-
     const key = roomKey(s.currentFloor, nx, ny);
     const alreadyCleared = !!s.completedRooms?.[key];
-    entry.message = alreadyCleared
-      ? `Revisited a cleared ${target.type} room.`
-      : `Entered a ${target.type} room.`;
+    const { path, pools } = drawFromPool(s.pools, target.type);
+    const location = { x: nx, y: ny };
+    const floor = s.currentFloor;
+    const runEvents: LogRunEventInput[] = [];
+    runEvents.push({
+      message: alreadyCleared
+        ? `Revisited a cleared ${target.type} room.`
+        : `Entered a ${target.type} room.`,
+      category: "movement",
+      floor,
+      location,
+      dedupeKey: `room:${floor}:${nx},${ny}:visit`,
+    });
 
     let mode: RunMode = "explore";
     let activeCombat: RunState["activeCombat"] = null;
+    let nextEncounterSerial = s.nextEncounterSerial;
+    let initiativeLine: string | undefined;
+    let enemyNames: string[] = [];
+    let encounterId: string | null = null;
 
     if (target.type === "combat" && !alreadyCleared) {
       mode = "combat";
       const enemies = selectEncounterEnemies(s.currentFloor);
-      const encounterSeed = `${s.runSeed ?? rand32()}:${key}:${s.journal.length}`;
+      const encounterSerial = s.nextEncounterSerial;
+      const encounterSeed = `${s.runSeed ?? rand32()}:${key}:${encounterSerial}`;
       const combatState = useCombatStore.getState();
       if (combatState.endEncounter) {
         combatState.endEncounter();
       }
-      const encounterSerial = s.journal.length;
       combatState.beginEncounter(
         enemies,
-        buildPlayerEncounterState(s.journal.length),
+        buildPlayerEncounterState(encounterSerial),
         encounterSeed
       );
       const encounter = useCombatStore.getState().encounter;
-      const initiativeLine = formatInitiativeJournal(encounter);
-      if (initiativeLine) {
-        entry.message = initiativeLine;
+      initiativeLine = formatInitiativeJournal(encounter);
+      if (encounter) {
+        encounterId = encounter.id;
+        const names: string[] = [];
+        for (const entityId of encounter.order) {
+          const entity = encounter.entities[entityId];
+          if (entity?.faction === "enemy" && entity.alive) {
+            names.push(entity.name ?? entityId);
+          }
+        }
+        enemyNames = names;
+      } else {
+        enemyNames = enemies.map((id) => getEnemyDefinition(id)?.name ?? id);
       }
       activeCombat = {
         floor: s.currentFloor,
@@ -533,9 +744,22 @@ export const useRunStore = create<RunState & RunActions>((set, get) => ({
         enemies,
         encounterSerial,
       };
-    }
-    if (alreadyCleared && !entry.message) {
-      entry.message = ROOM_CLEAR_MESSAGE;
+      nextEncounterSerial = encounterSerial + 1;
+      if (enemyNames.length) {
+        runEvents.push({
+          message: `Combat started against ${formatList(enemyNames)}.`,
+          category: "combat",
+          floor,
+          location,
+        });
+      } else {
+        runEvents.push({
+          message: "Combat started.",
+          category: "combat",
+          floor,
+          location,
+        });
+      }
     }
 
     const nextState: Partial<RunState> = {
@@ -544,7 +768,8 @@ export const useRunStore = create<RunState & RunActions>((set, get) => ({
       pools,
       mode,
       activeCombat,
-      journal: [...(s.journal ?? []), entry],
+      visitedRooms: { ...s.visitedRooms, [key]: true },
+      nextEncounterSerial,
     };
     set((prev) => ({ ...prev, ...nextState }));
     if (typeof window !== "undefined") {
@@ -556,6 +781,20 @@ export const useRunStore = create<RunState & RunActions>((set, get) => ({
       } catch {
         // ignore
       }
+    }
+
+    const { logRunEvent, logCombatEvent } = get();
+    for (const event of runEvents) {
+      logRunEvent(event);
+    }
+    if (initiativeLine && encounterId) {
+      logCombatEvent({
+        encounterId,
+        message: initiativeLine,
+        floor,
+        location,
+        tag: "turn",
+      });
     }
   },
 
@@ -617,23 +856,17 @@ export const useRunStore = create<RunState & RunActions>((set, get) => ({
       drops.push(...result.drops);
     }
 
-    const timestamp = Date.now();
-    const logEntries: JournalEntry[] = [];
     const enemyNames = Object.values(enemyNameMap);
-    const location: { floor: number; x: number; y: number; type: RoomType; scene: string | null } = {
-      floor: active.floor,
-      x: active.x,
-      y: active.y,
-      type: originalType,
-      scene: s.sceneId ?? null,
-    };
+    const runEvents: LogRunEventInput[] = [];
+    const location = { x: active.x, y: active.y };
 
     if (victory) {
       const opponentSummary = enemyNames.length ? formatList(enemyNames) : "unknown hostiles";
-      logEntries.push({
-        t: timestamp,
-        ...location,
+      runEvents.push({
         message: `Victory over ${opponentSummary}. Room cleared.`,
+        category: "combat",
+        floor: active.floor,
+        location,
       });
       const lootSummary = buildLootSummary({
         runSeed,
@@ -644,35 +877,35 @@ export const useRunStore = create<RunState & RunActions>((set, get) => ({
         enemyNameMap,
         drops,
       });
-      logEntries.push({
-        t: timestamp,
-        ...location,
+      runEvents.push({
         message: lootSummary.headline,
+        category: "loot",
+        floor: active.floor,
+        location,
       });
       for (const line of lootSummary.lines) {
-        logEntries.push({
-          t: timestamp,
-          ...location,
+        runEvents.push({
           message: line,
+          category: "loot",
+          floor: active.floor,
+          location,
         });
       }
     } else {
       const opponentSummary = enemyNames.length ? formatList(enemyNames) : "unknown hostiles";
-      logEntries.push({
-        t: timestamp,
-        ...location,
+      runEvents.push({
         message: `Defeated by ${opponentSummary}. Retreat required.`,
+        category: "combat",
+        floor: active.floor,
+        location,
       });
     }
-
-    const journal = [...(s.journal ?? []), ...logEntries];
 
     const nextState: Partial<RunState> = {
       grid: updatedGrid,
       completedRooms,
       mode: "explore",
       activeCombat: null,
-      journal,
       defeatOverlay: victory ? false : true,
     };
 
@@ -686,22 +919,12 @@ export const useRunStore = create<RunState & RunActions>((set, get) => ({
         // ignore
       }
     }
-  },
 
-  logCombatEvents: ({ encounterId, floor, location, lines }) => {
-    if (!lines || lines.length === 0) return;
-    const timestamp = Date.now();
-    const entries: CombatLogEntry[] = lines.map((line, index) => ({
-      id: `${encounterId}:${timestamp}:${index}`,
-      t: timestamp + index,
-      encounterId,
-      floor,
-      location: location ? { ...location } : undefined,
-      message: line,
-    }));
-    set((prev) => ({
-      combatLog: [...prev.combatLog, ...entries],
-    }));
+    const { logRunEvent, flushCombatToPersistent } = get();
+    for (const event of runEvents) {
+      logRunEvent(event);
+    }
+    flushCombatToPersistent();
   },
 
   _devSetRunFromSeed: async (floor: number, floorSeedNum: number) => {
@@ -725,6 +948,7 @@ export const useRunStore = create<RunState & RunActions>((set, get) => ({
     const pools = initialPools();
     const runSeed = rand32();
     const runId = `${Date.now().toString(36)}-${runSeed.toString(36)}`;
+    const visitedKey = roomKey(floor, playerPos.x, playerPos.y);
     const newState: RunState = {
       runId,
       runSeed,
@@ -735,21 +959,15 @@ export const useRunStore = create<RunState & RunActions>((set, get) => ({
       mode: "explore",
       sceneId: path,
       pools,
-      journal: [
-        {
-          t: Date.now(),
-          floor,
-          x: playerPos.x,
-          y: playerPos.y,
-          type: "entry",
-          scene: path,
-          message: "Arrived on the floor.",
-        },
-      ],
+      visitedRooms: { [visitedKey]: true },
+      runLog: [],
       combatLog: [],
+      combatLogBuffer: [],
+      combatLogEncounterId: null,
       completedRooms: {},
       defeatOverlay: false,
       activeCombat: null,
+      nextEncounterSerial: 0,
       dev: { gridOverlay: get().dev.gridOverlay },
     };
     set(() => newState);
@@ -812,6 +1030,7 @@ export const useRunStore = create<RunState & RunActions>((set, get) => ({
       combatState.endEncounter();
     }
 
+    const entryKey = roomKey(nextFloor, playerPos.x, playerPos.y);
     const newState: Partial<RunState> = {
       currentFloor: nextFloor,
       floorSeeds: { ...s.floorSeeds, [nextFloor]: floorSeed.seed >>> 0 },
@@ -820,18 +1039,7 @@ export const useRunStore = create<RunState & RunActions>((set, get) => ({
       mode: "explore",
       sceneId: path,
       pools,
-      journal: [
-        ...(s.journal ?? []),
-        {
-          t: Date.now(),
-          floor: nextFloor,
-          x: playerPos.x,
-          y: playerPos.y,
-          type: "entry",
-          scene: path,
-          message: "Arrived on the floor.",
-        },
-      ],
+      visitedRooms: { ...s.visitedRooms, [entryKey]: true },
       activeCombat: null,
       defeatOverlay: false,
     };
@@ -840,6 +1048,20 @@ export const useRunStore = create<RunState & RunActions>((set, get) => ({
       localStorage.setItem(STORAGE_KEY, JSON.stringify({ ...get() }));
       if (navigator?.vibrate) navigator.vibrate(12);
     }
+
+    const { logRunEvent } = get();
+    logRunEvent({
+      message: `Ascended to Floor ${nextFloor}.`,
+      category: "movement",
+      floor: nextFloor,
+    });
+    logRunEvent({
+      message: "Entered the entryway.",
+      category: "movement",
+      floor: nextFloor,
+      location: { x: playerPos.x, y: playerPos.y },
+      dedupeKey: `entry:${nextFloor}`,
+    });
   },
 
   endRun: () => {
@@ -857,11 +1079,15 @@ export const useRunStore = create<RunState & RunActions>((set, get) => ({
       mode: "explore",
       sceneId: null,
       pools: initialPools(),
-      journal: [],
+      visitedRooms: {},
+      runLog: [],
       combatLog: [],
+      combatLogBuffer: [],
+      combatLogEncounterId: null,
       completedRooms: {},
       defeatOverlay: false,
       activeCombat: null,
+      nextEncounterSerial: 0,
       dev: { gridOverlay: false },
     };
     set(() => cleared);

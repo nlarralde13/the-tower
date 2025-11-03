@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useCombatStore } from "@/state/combatStore";
 import { useRunStore } from "@/store/runStore";
+import type { CombatLogTag } from "@/store/runStore";
 import type { CombatEntity, Encounter, Resolution } from "@/engine/combat/types";
 import { getActionDefinition } from "@/content/index";
 import { useHaptics } from "@/hooks/useHaptics";
@@ -71,7 +72,7 @@ export default function CombatConsole() {
   const advanceTurn = useCombatStore((state) => state.advanceTurn);
   const activeSide = useCombatStore((state) => state.getActiveSide());
   const activeCombat = useRunStore((state) => state.activeCombat);
-  const logCombatEvents = useRunStore((state) => state.logCombatEvents);
+  const logCombatEvent = useRunStore((state) => state.logCombatEvent);
   const { trigger: triggerHaptic } = useHaptics();
 
   const [log, setLog] = useState<string[]>([]);
@@ -125,15 +126,26 @@ export default function CombatConsole() {
         }
       }
     }
-    logCombatEvents({
-      encounterId: encounter.id,
-      floor: activeCombat?.floor ?? 0,
-      location: activeCombat
-        ? { x: activeCombat.x, y: activeCombat.y }
-        : undefined,
-      lines: entries,
+    entries.forEach((line, index) => {
+      const lower = line.toLowerCase();
+      let tag: CombatLogTag | undefined;
+      if (index === 0) tag = "turn";
+      else if (lower.includes("critical")) tag = "crit";
+      else if (lower.includes("damage")) tag = "hit";
+      else if (lower.includes("miss")) tag = "miss";
+      else if (lower.includes("status")) tag = "status";
+      else if (lower.includes("expired")) tag = "status";
+      logCombatEvent({
+        encounterId: encounter.id,
+        floor: activeCombat?.floor ?? 0,
+        location: activeCombat
+          ? { x: activeCombat.x, y: activeCombat.y }
+          : undefined,
+        message: line,
+        tag,
+      });
     });
-  }, [lastResolution, encounter, logCombatEvents, activeCombat, triggerHaptic]);
+  }, [lastResolution, encounter, logCombatEvent, activeCombat, triggerHaptic]);
 
     useEffect(() => {
     if (!encounter) {
