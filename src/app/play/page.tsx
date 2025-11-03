@@ -6,7 +6,7 @@ import SceneViewer from "@/components/SceneViewer";
 import ThumbBar from "@/components/ThumbBar";
 import CombatRoot from "@/components/combat/CombatRoot";
 import CombatConsole from "@/components/combat/CombatConsole";
-import { useRunStore } from "@/store/runStore";
+import { useRunStore, type RoomRewardRecord } from "@/store/runStore";
 import { chooseFlavor, exitsFlavor } from "@/game/flavor";
 import { getEnemyDefinition } from "@/content/index";
 import { useRouter, useSearchParams } from "next/navigation";
@@ -29,6 +29,7 @@ export default function PlayPage() {
   const completedRooms = useRunStore((s) => s.completedRooms);
   const mode = useRunStore((s) => s.mode);
   const activeCombat = useRunStore((s) => s.activeCombat);
+  const roomRewards = useRunStore((s) => s.roomRewards);
 
   const [actionMsg, setActionMsg] = useState<string>("");
   // Mobile slide-in drawers
@@ -54,6 +55,7 @@ export default function PlayPage() {
 
   const currentType = useMemo(() => (pos && grid ? roomTypeAt(pos.x, pos.y) : null), [pos, grid, roomTypeAt]);
   const currentKey = pos ? `${currentFloor}:${pos.x},${pos.y}` : null;
+  const rewardForRoom = currentKey ? roomRewards?.[currentKey] ?? null : null;
   const caption = useMemo(() => {
     if (!currentType || !grid || !pos) return undefined;
     const dirs: string[] = [];
@@ -197,6 +199,7 @@ export default function PlayPage() {
                   overlayCentered
                   floor={useRunStore.getState().currentFloor}
                 />
+                {rewardForRoom ? <RewardSummary reward={rewardForRoom} /> : null}
                 <ThumbBar
                   onMove={(d) => {
                     if (!grid || !pos) return;
@@ -324,6 +327,43 @@ export default function PlayPage() {
         </div>
       </div>
     </PageSurface>
+  );
+}
+
+function RewardSummary({ reward }: { reward: RoomRewardRecord }) {
+  return (
+    <div
+      role="status"
+      aria-label="Reward summary"
+      style={{
+        marginTop: 12,
+        padding: "14px 16px",
+        borderRadius: 12,
+        border: "1px solid rgba(231,215,167,0.28)",
+        background: "rgba(18,15,26,0.72)",
+        display: "grid",
+        gap: 8,
+        boxShadow: "0 18px 30px rgba(0,0,0,0.35)",
+      }}
+    >
+      <div style={{ fontWeight: 600, fontSize: 15 }}>{reward.header}</div>
+      <div style={{ fontSize: 13, color: "var(--color-muted, #cbd5e1)" }}>{reward.intro}</div>
+      <ul
+        style={{
+          margin: 0,
+          paddingLeft: 18,
+          listStyle: "disc",
+          display: "grid",
+          gap: 4,
+          fontSize: 13,
+          color: "var(--color-muted, #d1d5db)",
+        }}
+      >
+        {reward.items.map((line, idx) => (
+          <li key={idx} style={{ lineHeight: 1.5 }}>{line}</li>
+        ))}
+      </ul>
+    </div>
   );
 }
 
