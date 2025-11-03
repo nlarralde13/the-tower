@@ -33,6 +33,9 @@ const rat: EnemyContract = {
     },
   ],
   tags: ["beast"],
+  loot: {
+    profileId: "slug",
+  },
 };
 
 export default rat;

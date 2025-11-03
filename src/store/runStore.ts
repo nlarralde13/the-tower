@@ -5,15 +5,26 @@ import type { FloorGrid, RoomType, FloorConfig, FloorSeed } from "@/types/tower"
 import { buildFloorSeedFromTemplate } from "@/engine/runFactory";
 import { generateFloorFromSeed } from "@/engine/generateFloor";
 import { useCombatStore } from "@/state/combatStore";
-import { getActionDefinition } from "@/content/index";
+import { getActionDefinition, getEnemyDefinition } from "@/content/index";
 import type { StartEncounterState } from "@/engine/combat/engine";
 import type { Encounter } from "@/engine/combat/types";
+import { generateBossLoot, generateEnemyLoot } from "@/game/loot/system";
+import type { LootDrop, LootResult } from "@/game/loot/types";
 
 type Point = { x: number; y: number };
 
 type RunMode = "explore" | "combat";
 
 type ScenePools = Record<string, { remaining: string[]; last?: string }>;
+
+export type RoomRewardRecord = {
+  header: string;
+  intro: string;
+  items: string[];
+  drops: LootDrop[];
+  loot: LootResult[];
+  enemyNames: string[];
+};
 
 type JournalEntry = {
   t: number;
@@ -23,6 +34,7 @@ type JournalEntry = {
   type: RoomType;
   scene: string | null;
   message?: string;
+  rewards?: RoomRewardRecord;
 };
 
 export type RunState = {
@@ -42,7 +54,9 @@ export type RunState = {
     x: number;
     y: number;
     enemies: string[];
+    encounterSerial: number;
   } | null;
+  roomRewards: Record<string, RoomRewardRecord>;
   dev: {
     gridOverlay: boolean;
   };
@@ -118,6 +132,118 @@ function drawFromPool(pools: ScenePools, type: RoomType): { path: string; pools:
 
 const ROOM_CLEAR_MESSAGE = "The enemy was defeated and the room is now clear to move on.";
 
+const BUREAU_OFFICES = [
+  "Office of Residual Heroics",
+  "Department of Unsettling Inventory",
+  "Clerks of Pernicious Gratitude",
+  "Registry of Forgotten Victories",
+  "Auditors of Ambient Dread",
+];
+
+const BUREAU_NOTES = [
+  "initialled in burgundy ink",
+  "sealed with three different waxes",
+  "flagged for \"emotional contamination\" review",
+  "accompanied by a whispered apology",
+  "filed in duplicate and then misplaced on purpose",
+  "stamped 'do not lick' by night shift archivists",
+];
+
+const NO_DROP_NOTES = [
+  "No physical assets recovered; clerk issued a memo titled \"Heroic Austerity.\"",
+  "Nothing salvageable beyond dust motes. Expect a survey about your effort.",
+  "All loot requisitioned upstream before arrival. Paper trail pending.",
+];
+
+function hashString(input: string): number {
+  let hash = 0;
+  for (let i = 0; i < input.length; i += 1) {
+    hash = (Math.imul(31, hash) + input.charCodeAt(i)) | 0;
+  }
+  return hash >>> 0;
+}
+
+function pickFrom<T>(arr: readonly T[], seed: number): T {
+  if (!arr.length) {
+    throw new Error("Cannot pick from empty array");
+  }
+  const index = seed % arr.length;
+  return arr[index < 0 ? index + arr.length : index];
+}
+
+function formatList(items: string[]): string {
+  if (items.length === 0) return "";
+  if (items.length === 1) return items[0];
+  if (items.length === 2) return `${items[0]} and ${items[1]}`;
+  const head = items.slice(0, -1).join(", ");
+  const tail = items[items.length - 1];
+  return `${head}, and ${tail}`;
+}
+
+function formatSourceBlurb(
+  source: string | undefined,
+  enemyNameMap: Record<string, string>
+): string {
+  if (!source) return "origin stamp smudged beyond legibility.";
+  const [type, id] = source.split(":", 2);
+  if (type === "enemy") {
+    const name = enemyNameMap[id] ?? id;
+    return `charged to ${name}'s incident report.`;
+  }
+  if (type === "boss") {
+    return `logged by the Boss Oversight desk (${id}).`;
+  }
+  return `recorded as ${source}.`;
+}
+
+function createRoomReward(params: {
+  runSeed: number;
+  floor: number;
+  x: number;
+  y: number;
+  encounterSerial: number;
+  enemyNameMap: Record<string, string>;
+  drops: LootDrop[];
+  lootResults: LootResult[];
+}): RoomRewardRecord {
+  const docketId = `${String(params.floor).padStart(2, "0")}-${String(params.x).padStart(2, "0")}${String(params.y).padStart(2, "0")}`;
+  const baseHash = hashString(
+    `${params.runSeed}:${params.floor}:${params.x}:${params.y}:${params.encounterSerial}`
+  );
+  const office = pickFrom(BUREAU_OFFICES, baseHash % BUREAU_OFFICES.length);
+  const header = `After-action docket ${docketId} filed with the ${office}.`;
+  const enemyNames = Object.values(params.enemyNameMap);
+  const intro = enemyNames.length
+    ? `Clerk's note: assets attributed to ${formatList(enemyNames)}.`
+    : "Clerk's note: assets attributed to unidentified aggressors.";
+
+  const items: string[] = [];
+  if (params.drops.length === 0) {
+    const note = pickFrom(NO_DROP_NOTES, baseHash % NO_DROP_NOTES.length);
+    items.push(note);
+  } else {
+    params.drops.forEach((drop, idx) => {
+      const dropHash = hashString(`${drop.id}:${baseHash}:${idx}`);
+      const note = pickFrom(BUREAU_NOTES, dropHash % BUREAU_NOTES.length);
+      const qty = drop.quantity > 1 ? `×${drop.quantity}` : "×1";
+      const rarityTag = drop.rarity.charAt(0).toUpperCase() + drop.rarity.slice(1);
+      const sourceBlurb = formatSourceBlurb(drop.source, params.enemyNameMap);
+      items.push(
+        `${drop.name} ${qty} — ${rarityTag} tier, ${note}; ${sourceBlurb}`
+      );
+    });
+  }
+
+  return {
+    header,
+    intro,
+    items,
+    drops: params.drops,
+    loot: params.lootResults,
+    enemyNames,
+  };
+}
+
 const DEFAULT_PLAYER_TEMPLATE: StartEncounterState["player"] = {
   id: "runner",
   name: "Runner",
@@ -192,14 +318,18 @@ function formatInitiativeJournal(encounter: Encounter | null): string | undefine
 function appendOutcomeMessage(
   entries: JournalEntry[],
   target: { floor: number; x: number; y: number },
-  message: string
+  message: string,
+  rewards?: RoomRewardRecord
 ): JournalEntry[] {
   if (entries.length === 0) return [...entries];
   const lastIndex = entries.length - 1;
   const last = entries[lastIndex];
   if (last.floor === target.floor && last.x === target.x && last.y === target.y) {
     const combined = last.message ? `${last.message} ${message}` : message;
-    const updated = { ...last, message: combined.trim() };
+    const updated: JournalEntry = { ...last, message: combined.trim() };
+    if (rewards) {
+      updated.rewards = rewards;
+    }
     return [...entries.slice(0, lastIndex), updated];
   }
   return [...entries];
@@ -217,6 +347,7 @@ export const useRunStore = create<RunState & RunActions>((set, get) => ({
   pools: initialPools(),
   journal: [],
   completedRooms: {},
+  roomRewards: {},
   activeCombat: null,
   dev: { gridOverlay: false },
 
@@ -238,6 +369,7 @@ export const useRunStore = create<RunState & RunActions>((set, get) => ({
         pools: parsed.pools ?? initialPools(),
         journal: parsed.journal ?? [],
         completedRooms: parsed.completedRooms ?? {},
+        roomRewards: parsed.roomRewards ?? {},
         activeCombat: null,
         dev: parsed.dev ?? { gridOverlay: false },
       }));
@@ -326,6 +458,7 @@ export const useRunStore = create<RunState & RunActions>((set, get) => ({
         { t: Date.now(), floor, x: playerPos.x, y: playerPos.y, type: "entry", scene: path },
       ],
       completedRooms: {},
+      roomRewards: {},
       activeCombat: null,
       dev: { gridOverlay: false },
     };
@@ -375,6 +508,10 @@ export const useRunStore = create<RunState & RunActions>((set, get) => ({
 
     const key = roomKey(s.currentFloor, nx, ny);
     const alreadyCleared = !!s.completedRooms?.[key];
+    const rewardRecord = s.roomRewards?.[key];
+    if (rewardRecord) {
+      entry.rewards = rewardRecord;
+    }
 
     let mode: RunMode = "explore";
     let activeCombat: RunState["activeCombat"] = null;
@@ -387,6 +524,7 @@ export const useRunStore = create<RunState & RunActions>((set, get) => ({
       if (combatState.endEncounter) {
         combatState.endEncounter();
       }
+      const encounterSerial = s.journal.length;
       combatState.beginEncounter(
         enemies,
         buildPlayerEncounterState(s.journal.length),
@@ -402,6 +540,7 @@ export const useRunStore = create<RunState & RunActions>((set, get) => ({
         x: nx,
         y: ny,
         enemies,
+        encounterSerial,
       };
     }
     if (alreadyCleared && !entry.message) {
@@ -450,13 +589,62 @@ export const useRunStore = create<RunState & RunActions>((set, get) => ({
       }
     }
 
+    const runSeed = s.runSeed ?? 0;
+    const encounterSerial = active.encounterSerial ?? 0;
+    let rewardRecord = s.roomRewards?.[key] ?? null;
+    if (victory && !rewardRecord) {
+      const enemyNameMap: Record<string, string> = {};
+      const lootResults: LootResult[] = [];
+      const drops: LootDrop[] = [];
+      for (const enemyId of active.enemies) {
+        const enemyDef = getEnemyDefinition(enemyId);
+        if (enemyDef?.name) {
+          enemyNameMap[enemyId] = enemyDef.name;
+        } else if (!enemyNameMap[enemyId]) {
+          enemyNameMap[enemyId] = enemyId;
+        }
+        const bossTableId = enemyDef?.loot?.bossTableId;
+        if (bossTableId) {
+          const result = generateBossLoot({
+            runSeed,
+            floor: active.floor,
+            bossId: bossTableId,
+            encounterSerial,
+          });
+          lootResults.push(result);
+          drops.push(...result.drops);
+          continue;
+        }
+        const result = generateEnemyLoot({
+          runSeed,
+          floor: active.floor,
+          sourceId: enemyId,
+          profileId: enemyDef?.loot?.profileId ?? undefined,
+          encounterSerial,
+        });
+        lootResults.push(result);
+        drops.push(...result.drops);
+      }
+      rewardRecord = createRoomReward({
+        runSeed,
+        floor: active.floor,
+        x: active.x,
+        y: active.y,
+        encounterSerial,
+        enemyNameMap,
+        drops,
+        lootResults,
+      });
+    }
+
     const outcome = victory
       ? ROOM_CLEAR_MESSAGE
       : "Defeat... you were forced to retreat.";
     const journal = appendOutcomeMessage(
       s.journal ?? [],
       { floor: active.floor, x: active.x, y: active.y },
-      outcome
+      outcome,
+      victory && rewardRecord ? rewardRecord : undefined
     );
 
     const nextState: Partial<RunState> = {
@@ -466,6 +654,13 @@ export const useRunStore = create<RunState & RunActions>((set, get) => ({
       activeCombat: null,
       journal,
     };
+
+    if (rewardRecord) {
+      const existing = s.roomRewards ?? {};
+      if (existing[key] !== rewardRecord) {
+        nextState.roomRewards = { ...existing, [key]: rewardRecord };
+      }
+    }
 
     set((prev) => ({ ...prev, ...nextState }));
 
@@ -514,6 +709,7 @@ export const useRunStore = create<RunState & RunActions>((set, get) => ({
         { t: Date.now(), floor, x: playerPos.x, y: playerPos.y, type: "entry", scene: path },
       ],
       completedRooms: {},
+      roomRewards: {},
       activeCombat: null,
       dev: { gridOverlay: get().dev.gridOverlay },
     };
@@ -612,6 +808,7 @@ export const useRunStore = create<RunState & RunActions>((set, get) => ({
       pools: initialPools(),
       journal: [],
       completedRooms: {},
+      roomRewards: {},
       activeCombat: null,
       dev: { gridOverlay: false },
     };

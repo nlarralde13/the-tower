@@ -34,6 +34,9 @@ const acolyte: EnemyContract = {
     },
   ],
   tags: ["cultist"],
+  loot: {
+    profileId: "cultist",
+  },
 };
 
 export default acolyte;

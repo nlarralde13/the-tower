@@ -370,6 +370,10 @@ export interface EnemyContract {
   actionPlan: EnemyActionPlan[];
   tags?: string[];
   items?: string[];
+  loot?: {
+    profileId?: string;
+    bossTableId?: string;
+  };
 }
 
 export interface InitiativeResult {
