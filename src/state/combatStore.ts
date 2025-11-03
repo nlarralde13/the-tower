@@ -45,6 +45,13 @@ export const useCombatStore = create<CombatStoreState>((set, get) => {
     clearEnemyTimer();
     const state = get();
     if (!state.encounter || state.activeSide !== "enemy") return;
+    const actorId = state.encounter.order[state.encounter.activeIndex];
+    const actor = actorId ? state.encounter.entities[actorId] : undefined;
+    if (!actor || actor.faction !== "enemy") {
+      // No enemy is queued to act; flip control back to the player and skip scheduling.
+      set({ activeSide: "player" });
+      return;
+    }
     enemyTurnTimer = setTimeout(() => {
       enemyTurnTimer = null;
       const latest = get();
@@ -100,6 +107,14 @@ export const useCombatStore = create<CombatStoreState>((set, get) => {
     advanceTurn: () => {
       const encounter = get().encounter;
       if (!encounter) return;
+      const actorId = encounter.order[encounter.activeIndex];
+      const actor = actorId ? encounter.entities[actorId] : undefined;
+      if (!actor || actor.faction !== "enemy") {
+        // Defensive guard: if an enemy turn was queued but no enemy is ready, stop the loop.
+        clearEnemyTimer();
+        set({ activeSide: "player" });
+        return;
+      }
       const update = takeTurn(encounter);
       const nextSide: "player" | "enemy" =
         get().activeSide === "player" ? "enemy" : "player";

@@ -129,11 +129,12 @@ function pickLootDefinition(
   category: LootCategory,
   rarity: LootRarity,
   floor: number,
-  rng: () => number
+  rng: () => number,
+  minRarityIndex = 0
 ): ResolvedLootDefinition | null {
   const rarityIndex = LOOT_RARITIES.indexOf(rarity);
   if (rarityIndex === -1) return null;
-  for (let i = rarityIndex; i >= 0; i -= 1) {
+  for (let i = rarityIndex; i >= minRarityIndex; i -= 1) {
     const targetRarity = LOOT_RARITIES[i];
     const pool = catalog[category].filter(def => {
       if (def.unique) return false;
@@ -221,6 +222,53 @@ export function generateEnemyLoot(ctx: LootContext): LootResult {
     const def = pickLootDefinition(category, rarity, ctx.floor, rng);
     if (!def) continue;
     drops.push(formatDrop(def, `enemy:${ctx.sourceId}`));
+  }
+
+  const minimumRarityIndex = LOOT_RARITIES.indexOf("uncommon");
+  if (minimumRarityIndex !== -1) {
+    const hasUncommonOrBetter = drops.some(
+      (drop) => LOOT_RARITIES.indexOf(drop.rarity) >= minimumRarityIndex
+    );
+    if (!hasUncommonOrBetter) {
+      const preferredCategories: LootCategory[] = [];
+      for (const drop of drops) {
+        if (!preferredCategories.includes(drop.category)) {
+          preferredCategories.push(drop.category);
+        }
+      }
+      const weightedCategories = Object.entries(categoryWeights)
+        .sort(([, a], [, b]) => (b ?? 0) - (a ?? 0))
+        .map(([key]) => key as LootCategory);
+      for (const category of weightedCategories) {
+        if (!preferredCategories.includes(category)) {
+          preferredCategories.push(category);
+        }
+      }
+      for (const category of Object.keys(catalog) as LootCategory[]) {
+        if (!preferredCategories.includes(category)) {
+          preferredCategories.push(category);
+        }
+      }
+
+      let enforced = false;
+      for (const category of preferredCategories) {
+        for (let rarityIndex = LOOT_RARITIES.length - 1; rarityIndex >= minimumRarityIndex; rarityIndex -= 1) {
+          const candidate = pickLootDefinition(
+            category,
+            LOOT_RARITIES[rarityIndex],
+            ctx.floor,
+            rng,
+            minimumRarityIndex
+          );
+          if (candidate) {
+            drops.push(formatDrop(candidate, `enemy:${ctx.sourceId}`));
+            enforced = true;
+            break;
+          }
+        }
+        if (enforced) break;
+      }
+    }
   }
 
   return {

@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import { create } from "zustand";
 import type { FloorGrid, RoomType, FloorConfig, FloorSeed } from "@/types/tower";
@@ -9,22 +9,13 @@ import { getActionDefinition, getEnemyDefinition } from "@/content/index";
 import type { StartEncounterState } from "@/engine/combat/engine";
 import type { Encounter } from "@/engine/combat/types";
 import { generateBossLoot, generateEnemyLoot } from "@/game/loot/system";
-import type { LootDrop, LootResult } from "@/game/loot/types";
+import type { LootDrop } from "@/game/loot/types";
 
 type Point = { x: number; y: number };
 
 type RunMode = "explore" | "combat";
 
 type ScenePools = Record<string, { remaining: string[]; last?: string }>;
-
-export type RoomRewardRecord = {
-  header: string;
-  intro: string;
-  items: string[];
-  drops: LootDrop[];
-  loot: LootResult[];
-  enemyNames: string[];
-};
 
 type JournalEntry = {
   t: number;
@@ -34,7 +25,15 @@ type JournalEntry = {
   type: RoomType;
   scene: string | null;
   message?: string;
-  rewards?: RoomRewardRecord;
+};
+
+type CombatLogEntry = {
+  id: string;
+  t: number;
+  encounterId: string;
+  floor: number;
+  location?: { x: number; y: number };
+  message: string;
 };
 
 export type RunState = {
@@ -49,6 +48,7 @@ export type RunState = {
   pools: ScenePools; // per-roomType pools for non-repeating selection
   journal: JournalEntry[];
   completedRooms: Record<string, boolean>;
+  combatLog: CombatLogEntry[];
   activeCombat: {
     floor: number;
     x: number;
@@ -56,7 +56,6 @@ export type RunState = {
     enemies: string[];
     encounterSerial: number;
   } | null;
-  roomRewards: Record<string, RoomRewardRecord>;
   defeatOverlay: boolean;
   dev: {
     gridOverlay: boolean;
@@ -73,6 +72,12 @@ type RunActions = {
   ascend?: () => Promise<void>;
   endRun?: () => void;
   completeCombat: (opts: { victory: boolean }) => void;
+  logCombatEvents: (payload: {
+    encounterId: string;
+    floor: number;
+    location?: { x: number; y: number };
+    lines: string[];
+  }) => void;
 };
 
 const STORAGE_KEY = "runState:v1";
@@ -197,7 +202,7 @@ function formatSourceBlurb(
   return `recorded as ${source}.`;
 }
 
-function createRoomReward(params: {
+function buildLootSummary(params: {
   runSeed: number;
   floor: number;
   x: number;
@@ -205,18 +210,17 @@ function createRoomReward(params: {
   encounterSerial: number;
   enemyNameMap: Record<string, string>;
   drops: LootDrop[];
-  lootResults: LootResult[];
-}): RoomRewardRecord {
+}): { headline: string; lines: string[] } {
   const docketId = `${String(params.floor).padStart(2, "0")}-${String(params.x).padStart(2, "0")}${String(params.y).padStart(2, "0")}`;
   const baseHash = hashString(
     `${params.runSeed}:${params.floor}:${params.x}:${params.y}:${params.encounterSerial}`
   );
   const office = pickFrom(BUREAU_OFFICES, baseHash % BUREAU_OFFICES.length);
-  const header = `After-action docket ${docketId} filed with the ${office}.`;
+  const headline = `After-action docket ${docketId} filed with the ${office}.`;
   const enemyNames = Object.values(params.enemyNameMap);
   const intro = enemyNames.length
-    ? `Clerk's note: assets attributed to ${formatList(enemyNames)}.`
-    : "Clerk's note: assets attributed to unidentified aggressors.";
+    ? `Assets attributed to ${formatList(enemyNames)}.`
+    : "Assets attributed to unidentified aggressors.";
 
   const items: string[] = [];
   if (params.drops.length === 0) {
@@ -226,22 +230,18 @@ function createRoomReward(params: {
     params.drops.forEach((drop, idx) => {
       const dropHash = hashString(`${drop.id}:${baseHash}:${idx}`);
       const note = pickFrom(BUREAU_NOTES, dropHash % BUREAU_NOTES.length);
-      const qty = drop.quantity > 1 ? `×${drop.quantity}` : "×1";
+      const qty = drop.quantity > 1 ? `x${drop.quantity}` : "x1";
       const rarityTag = drop.rarity.charAt(0).toUpperCase() + drop.rarity.slice(1);
       const sourceBlurb = formatSourceBlurb(drop.source, params.enemyNameMap);
       items.push(
-        `${drop.name} ${qty} — ${rarityTag} tier, ${note}; ${sourceBlurb}`
+        `${drop.name} ${qty} - ${rarityTag} tier, ${note}; ${sourceBlurb}`
       );
     });
   }
 
   return {
-    header,
-    intro,
-    items,
-    drops: params.drops,
-    loot: params.lootResults,
-    enemyNames,
+    headline,
+    lines: [intro, ...items],
   };
 }
 
@@ -316,26 +316,6 @@ function formatInitiativeJournal(encounter: Encounter | null): string | undefine
   return `Initiative: ${enemyEntity.name} struck first with ${actionName}.`;
 }
 
-function appendOutcomeMessage(
-  entries: JournalEntry[],
-  target: { floor: number; x: number; y: number },
-  message: string,
-  rewards?: RoomRewardRecord
-): JournalEntry[] {
-  if (entries.length === 0) return [...entries];
-  const lastIndex = entries.length - 1;
-  const last = entries[lastIndex];
-  if (last.floor === target.floor && last.x === target.x && last.y === target.y) {
-    const combined = last.message ? `${last.message} ${message}` : message;
-    const updated: JournalEntry = { ...last, message: combined.trim() };
-    if (rewards) {
-      updated.rewards = rewards;
-    }
-    return [...entries.slice(0, lastIndex), updated];
-  }
-  return [...entries];
-}
-
 export const useRunStore = create<RunState & RunActions>((set, get) => ({
   runId: null,
   runSeed: null,
@@ -348,7 +328,7 @@ export const useRunStore = create<RunState & RunActions>((set, get) => ({
   pools: initialPools(),
   journal: [],
   completedRooms: {},
-  roomRewards: {},
+  combatLog: [],
   defeatOverlay: false,
   activeCombat: null,
   dev: { gridOverlay: false },
@@ -371,7 +351,7 @@ export const useRunStore = create<RunState & RunActions>((set, get) => ({
       pools: parsed.pools ?? initialPools(),
       journal: parsed.journal ?? [],
       completedRooms: parsed.completedRooms ?? {},
-      roomRewards: parsed.roomRewards ?? {},
+      combatLog: parsed.combatLog ?? [],
       defeatOverlay: parsed.defeatOverlay ?? false,
       activeCombat: null,
       dev: parsed.dev ?? { gridOverlay: false },
@@ -458,14 +438,22 @@ export const useRunStore = create<RunState & RunActions>((set, get) => ({
       sceneId: path,
       pools,
       journal: [
-    { t: Date.now(), floor, x: playerPos.x, y: playerPos.y, type: "entry", scene: path },
-  ],
-  completedRooms: {},
-  roomRewards: {},
-  defeatOverlay: false,
-  activeCombat: null,
-  dev: { gridOverlay: false },
-};
+        {
+          t: Date.now(),
+          floor,
+          x: playerPos.x,
+          y: playerPos.y,
+          type: "entry",
+          scene: path,
+          message: "Arrived on the floor.",
+        },
+      ],
+      combatLog: [],
+      completedRooms: {},
+      defeatOverlay: false,
+      activeCombat: null,
+      dev: { gridOverlay: false },
+    };
     set(() => newState);
     if (typeof window !== "undefined") localStorage.setItem(STORAGE_KEY, JSON.stringify(newState));
   },
@@ -512,10 +500,9 @@ export const useRunStore = create<RunState & RunActions>((set, get) => ({
 
     const key = roomKey(s.currentFloor, nx, ny);
     const alreadyCleared = !!s.completedRooms?.[key];
-    const rewardRecord = s.roomRewards?.[key];
-    if (rewardRecord) {
-      entry.rewards = rewardRecord;
-    }
+    entry.message = alreadyCleared
+      ? `Revisited a cleared ${target.type} room.`
+      : `Entered a ${target.type} room.`;
 
     let mode: RunMode = "explore";
     let activeCombat: RunState["activeCombat"] = null;
@@ -579,57 +566,76 @@ export const useRunStore = create<RunState & RunActions>((set, get) => ({
     const active = s.activeCombat;
     if (!active) return;
     const key = roomKey(active.floor, active.x, active.y);
+    const grid = s.grid;
+    const cellIndex = grid ? idx(active.x, active.y, grid.width) : -1;
+    const originalType = grid && cellIndex >= 0 ? grid.cells[cellIndex]?.type ?? "combat" : "combat";
     const completedRooms = victory
       ? { ...s.completedRooms, [key]: true }
       : { ...s.completedRooms };
 
     let updatedGrid = s.grid;
     if (victory && updatedGrid) {
-      const cellIndex = idx(active.x, active.y, updatedGrid.width);
-      if (cellIndex >= 0 && cellIndex < updatedGrid.cells.length) {
+      const writableIndex = idx(active.x, active.y, updatedGrid.width);
+      if (writableIndex >= 0 && writableIndex < updatedGrid.cells.length) {
         const cells = [...updatedGrid.cells];
-        cells[cellIndex] = { ...cells[cellIndex], type: "empty" };
+        cells[writableIndex] = { ...cells[writableIndex], type: "empty" };
         updatedGrid = { ...updatedGrid, cells };
       }
     }
 
     const runSeed = s.runSeed ?? 0;
     const encounterSerial = active.encounterSerial ?? 0;
-    let rewardRecord = s.roomRewards?.[key] ?? null;
-    if (victory && !rewardRecord) {
-      const enemyNameMap: Record<string, string> = {};
-      const lootResults: LootResult[] = [];
-      const drops: LootDrop[] = [];
-      for (const enemyId of active.enemies) {
-        const enemyDef = getEnemyDefinition(enemyId);
-        if (enemyDef?.name) {
-          enemyNameMap[enemyId] = enemyDef.name;
-        } else if (!enemyNameMap[enemyId]) {
-          enemyNameMap[enemyId] = enemyId;
-        }
-        const bossTableId = enemyDef?.loot?.bossTableId;
-        if (bossTableId) {
-          const result = generateBossLoot({
-            runSeed,
-            floor: active.floor,
-            bossId: bossTableId,
-            encounterSerial,
-          });
-          lootResults.push(result);
-          drops.push(...result.drops);
-          continue;
-        }
-        const result = generateEnemyLoot({
+    const enemyNameMap: Record<string, string> = {};
+    const drops: LootDrop[] = [];
+    for (const enemyId of active.enemies) {
+      const enemyDef = getEnemyDefinition(enemyId);
+      if (enemyDef?.name) {
+        enemyNameMap[enemyId] = enemyDef.name;
+      } else if (!enemyNameMap[enemyId]) {
+        enemyNameMap[enemyId] = enemyId;
+      }
+      const bossTableId = enemyDef?.loot?.bossTableId;
+      if (bossTableId) {
+        const result = generateBossLoot({
           runSeed,
           floor: active.floor,
-          sourceId: enemyId,
-          profileId: enemyDef?.loot?.profileId ?? undefined,
+          bossId: bossTableId,
           encounterSerial,
         });
-        lootResults.push(result);
         drops.push(...result.drops);
+        continue;
       }
-      rewardRecord = createRoomReward({
+      const result = generateEnemyLoot({
+        runSeed,
+        floor: active.floor,
+        sourceId: enemyId,
+        // Adjust the per-NPC loot table by changing `loot.profileId` inside
+        // the enemy definition in src/content/enemies/*.ts.
+        profileId: enemyDef?.loot?.profileId ?? undefined,
+        encounterSerial,
+      });
+      drops.push(...result.drops);
+    }
+
+    const timestamp = Date.now();
+    const logEntries: JournalEntry[] = [];
+    const enemyNames = Object.values(enemyNameMap);
+    const location: { floor: number; x: number; y: number; type: RoomType; scene: string | null } = {
+      floor: active.floor,
+      x: active.x,
+      y: active.y,
+      type: originalType,
+      scene: s.sceneId ?? null,
+    };
+
+    if (victory) {
+      const opponentSummary = enemyNames.length ? formatList(enemyNames) : "unknown hostiles";
+      logEntries.push({
+        t: timestamp,
+        ...location,
+        message: `Victory over ${opponentSummary}. Room cleared.`,
+      });
+      const lootSummary = buildLootSummary({
         runSeed,
         floor: active.floor,
         x: active.x,
@@ -637,19 +643,29 @@ export const useRunStore = create<RunState & RunActions>((set, get) => ({
         encounterSerial,
         enemyNameMap,
         drops,
-        lootResults,
+      });
+      logEntries.push({
+        t: timestamp,
+        ...location,
+        message: lootSummary.headline,
+      });
+      for (const line of lootSummary.lines) {
+        logEntries.push({
+          t: timestamp,
+          ...location,
+          message: line,
+        });
+      }
+    } else {
+      const opponentSummary = enemyNames.length ? formatList(enemyNames) : "unknown hostiles";
+      logEntries.push({
+        t: timestamp,
+        ...location,
+        message: `Defeated by ${opponentSummary}. Retreat required.`,
       });
     }
 
-    const outcome = victory
-      ? ROOM_CLEAR_MESSAGE
-      : "Defeat... you were forced to retreat.";
-    const journal = appendOutcomeMessage(
-      s.journal ?? [],
-      { floor: active.floor, x: active.x, y: active.y },
-      outcome,
-      victory && rewardRecord ? rewardRecord : undefined
-    );
+    const journal = [...(s.journal ?? []), ...logEntries];
 
     const nextState: Partial<RunState> = {
       grid: updatedGrid,
@@ -659,13 +675,6 @@ export const useRunStore = create<RunState & RunActions>((set, get) => ({
       journal,
       defeatOverlay: victory ? false : true,
     };
-
-    if (rewardRecord) {
-      const existing = s.roomRewards ?? {};
-      if (existing[key] !== rewardRecord) {
-        nextState.roomRewards = { ...existing, [key]: rewardRecord };
-      }
-    }
 
     set((prev) => ({ ...prev, ...nextState }));
 
@@ -677,6 +686,22 @@ export const useRunStore = create<RunState & RunActions>((set, get) => ({
         // ignore
       }
     }
+  },
+
+  logCombatEvents: ({ encounterId, floor, location, lines }) => {
+    if (!lines || lines.length === 0) return;
+    const timestamp = Date.now();
+    const entries: CombatLogEntry[] = lines.map((line, index) => ({
+      id: `${encounterId}:${timestamp}:${index}`,
+      t: timestamp + index,
+      encounterId,
+      floor,
+      location: location ? { ...location } : undefined,
+      message: line,
+    }));
+    set((prev) => ({
+      combatLog: [...prev.combatLog, ...entries],
+    }));
   },
 
   _devSetRunFromSeed: async (floor: number, floorSeedNum: number) => {
@@ -710,15 +735,23 @@ export const useRunStore = create<RunState & RunActions>((set, get) => ({
       mode: "explore",
       sceneId: path,
       pools,
-  journal: [
-    { t: Date.now(), floor, x: playerPos.x, y: playerPos.y, type: "entry", scene: path },
-  ],
-  completedRooms: {},
-  roomRewards: {},
-  defeatOverlay: false,
-  activeCombat: null,
-  dev: { gridOverlay: get().dev.gridOverlay },
-};
+      journal: [
+        {
+          t: Date.now(),
+          floor,
+          x: playerPos.x,
+          y: playerPos.y,
+          type: "entry",
+          scene: path,
+          message: "Arrived on the floor.",
+        },
+      ],
+      combatLog: [],
+      completedRooms: {},
+      defeatOverlay: false,
+      activeCombat: null,
+      dev: { gridOverlay: get().dev.gridOverlay },
+    };
     set(() => newState);
     if (typeof window !== "undefined") localStorage.setItem(STORAGE_KEY, JSON.stringify(newState));
   },
@@ -785,12 +818,23 @@ export const useRunStore = create<RunState & RunActions>((set, get) => ({
       grid: newGrid,
       playerPos,
       mode: "explore",
-    sceneId: path,
-    pools,
-    journal: [...(s.journal ?? []), { t: Date.now(), floor: nextFloor, x: playerPos.x, y: playerPos.y, type: "entry", scene: path }],
-    activeCombat: null,
-    defeatOverlay: false,
-  };
+      sceneId: path,
+      pools,
+      journal: [
+        ...(s.journal ?? []),
+        {
+          t: Date.now(),
+          floor: nextFloor,
+          x: playerPos.x,
+          y: playerPos.y,
+          type: "entry",
+          scene: path,
+          message: "Arrived on the floor.",
+        },
+      ],
+      activeCombat: null,
+      defeatOverlay: false,
+    };
     set((prev) => ({ ...prev, ...newState }));
     if (typeof window !== "undefined") {
       localStorage.setItem(STORAGE_KEY, JSON.stringify({ ...get() }));
@@ -812,14 +856,14 @@ export const useRunStore = create<RunState & RunActions>((set, get) => ({
       playerPos: null,
       mode: "explore",
       sceneId: null,
-    pools: initialPools(),
-    journal: [],
-    completedRooms: {},
-    roomRewards: {},
-    defeatOverlay: false,
-    activeCombat: null,
-    dev: { gridOverlay: false },
-  };
+      pools: initialPools(),
+      journal: [],
+      combatLog: [],
+      completedRooms: {},
+      defeatOverlay: false,
+      activeCombat: null,
+      dev: { gridOverlay: false },
+    };
     set(() => cleared);
     if (typeof window !== "undefined") localStorage.setItem(STORAGE_KEY, JSON.stringify(cleared));
   },

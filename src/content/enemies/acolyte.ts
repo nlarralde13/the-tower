@@ -35,6 +35,7 @@ const acolyte: EnemyContract = {
   ],
   tags: ["cultist"],
   loot: {
+    // Update this profileId to point at the desired loot table for acolytes.
     profileId: "cultist",
   },
 };

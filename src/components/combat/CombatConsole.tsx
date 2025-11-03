@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useCombatStore } from "@/state/combatStore";
+import { useRunStore } from "@/store/runStore";
 import type { CombatEntity, Encounter, Resolution } from "@/engine/combat/types";
 import { getActionDefinition } from "@/content/index";
 
@@ -68,6 +69,8 @@ export default function CombatConsole() {
   const commitDecision = useCombatStore((state) => state.commitPlayerDecision);
   const advanceTurn = useCombatStore((state) => state.advanceTurn);
   const activeSide = useCombatStore((state) => state.getActiveSide());
+  const activeCombat = useRunStore((state) => state.activeCombat);
+  const logCombatEvents = useRunStore((state) => state.logCombatEvents);
 
   const [log, setLog] = useState<string[]>([]);
   const [pending, setPending] = useState(false);
@@ -109,7 +112,15 @@ export default function CombatConsole() {
     const entries = describeResolution(lastResolution, encounter);
     if (entries.length === 0) return;
     setLog((prev) => [...prev, ...entries].slice(-12));
-  }, [lastResolution, encounter]);
+    logCombatEvents({
+      encounterId: encounter.id,
+      floor: activeCombat?.floor ?? 0,
+      location: activeCombat
+        ? { x: activeCombat.x, y: activeCombat.y }
+        : undefined,
+      lines: entries,
+    });
+  }, [lastResolution, encounter, logCombatEvents, activeCombat]);
 
     useEffect(() => {
     if (!encounter) {
@@ -166,13 +177,13 @@ export default function CombatConsole() {
 
   if (!encounter || !player) {
     return (
-      <div
-        className="rounded-md border border-white/10 bg-black/60 p-4 text-sm text-white/80"
-        role="group"
-        aria-label="Combat console"
+      <section
+        className="combat-console combat-console--empty"
+        role="region"
+        aria-label="Combat interface"
       >
         <p>No active encounter.</p>
-      </div>
+      </section>
     );
   }
 
@@ -192,29 +203,20 @@ export default function CombatConsole() {
   };
 
   return (
-    <div
-      className="rounded-md border border-white/10 bg-black/70 p-4 text-sm text-white"
-      role="group"
+    <section
+      className="combat-console"
+      role="region"
       aria-label="Combat controls"
-      style={{ display: "grid", gap: 16 }}
     >
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-        <div>
-          <div style={{ fontSize: 12, textTransform: "uppercase", letterSpacing: 0.08, opacity: 0.8 }}>
-            Initiative
-          </div>
-          <div style={{ fontWeight: 600 }}>
+      <header className="combat-console__header">
+        <div className="combat-console__initiative">
+          <div className="combat-console__label">Initiative</div>
+          <div className="combat-console__value">
             {encounter.initiative.first === "player" ? "You act first" : "Enemies act first"}
           </div>
         </div>
         <div
-          style={{
-            padding: "4px 10px",
-            borderRadius: 999,
-            border: "1px solid rgba(255,255,255,0.18)",
-            background: "rgba(255,255,255,0.08)",
-            fontSize: 12,
-          }}
+          className={`combat-console__turn ${pending ? "is-pending" : ""}`}
           aria-live="polite"
         >
           {activeSide === "player"
@@ -223,93 +225,53 @@ export default function CombatConsole() {
               : "Your turn"
             : "Enemy turn"}
         </div>
-      </div>
+      </header>
 
-      <div
-        style={{
-          display: "grid",
-          gap: 16,
-          gridTemplateColumns: "repeat(auto-fit, minmax(240px, 1fr))",
-        }}
-      >
-        <div
-          style={{
-            background: "rgba(34,197,94,0.12)",
-            borderRadius: 12,
-            padding: 14,
-            border: "1px solid rgba(34,197,94,0.35)",
-            display: "grid",
-            gap: 8,
-          }}
-        >
-          <div style={{ fontWeight: 600, fontSize: 16 }}>{player.name}</div>
-          <div style={{ fontSize: 13, opacity: 0.85 }}>HP: {player.stats.HP}</div>
-          <div style={{ fontSize: 13, opacity: 0.85 }}>
+      <div className="combat-console__panels">
+        <div className="combat-console__panel combat-console__panel--player">
+          <div className="combat-console__panel-heading">
+            <span className="combat-console__panel-title">{player.name}</span>
+            <span className="combat-console__panel-meta">HP: {player.stats.HP}</span>
+          </div>
+          <div className="combat-console__panel-meta">
             Focus: {player.resources?.focus ?? 0}
           </div>
-          <div style={{ marginTop: 4, fontSize: 12, textTransform: "uppercase", opacity: 0.7 }}>
-            Actions
-          </div>
-          <div style={{ display: "grid", gap: 8 }}>
+          <div className="combat-console__section-label">Actions</div>
+          <div className="combat-console__actions">
             {playerActions.map((action) => (
               <button
                 key={action.contract.id}
+                className="combat-console__action"
                 onClick={() => handleAction(action.contract.id)}
                 disabled={!canAct}
-                style={{
-                  borderRadius: 8,
-                  padding: "8px 10px",
-                  border: "1px solid rgba(255,255,255,0.18)",
-                  background: canAct ? "rgba(255,255,255,0.06)" : "rgba(255,255,255,0.04)",
-                  color: "inherit",
-                  textAlign: "left",
-                  cursor: canAct ? "pointer" : "not-allowed",
-                }}
               >
-                <div style={{ fontWeight: 600 }}>{action.contract.name}</div>
-                <div style={{ fontSize: 12, opacity: 0.75 }}>
+                <span className="combat-console__action-name">{action.contract.name}</span>
+                <span className="combat-console__action-meta">
                   {action.contract.category.toUpperCase()}
-                </div>
+                </span>
               </button>
             ))}
             {playerActions.length === 0 && (
-              <div style={{ fontSize: 12, opacity: 0.7 }}>No actions available.</div>
+              <div className="combat-console__empty">No actions available.</div>
             )}
           </div>
         </div>
 
-        <div
-          style={{
-            background: "rgba(239,68,68,0.1)",
-            borderRadius: 12,
-            padding: 14,
-            border: "1px solid rgba(239,68,68,0.3)",
-            display: "grid",
-            gap: 8,
-          }}
-        >
-          <div style={{ fontWeight: 600, fontSize: 16 }}>Opponents</div>
+        <div className="combat-console__panel combat-console__panel--enemies">
+          <div className="combat-console__panel-title">Opponents</div>
           {enemies.length === 0 && (
-            <div style={{ fontSize: 12, opacity: 0.75 }}>No enemies detected.</div>
+            <div className="combat-console__empty">No enemies detected.</div>
           )}
           {enemies.map((enemy) => (
             <div
               key={enemy.id}
-              style={{
-                padding: "8px 10px",
-                borderRadius: 8,
-                border: "1px solid rgba(255,255,255,0.1)",
-                background: enemy.alive ? "rgba(255,255,255,0.04)" : "rgba(15,23,42,0.5)",
-                opacity: enemy.alive ? 1 : 0.6,
-              }}
+              className={`combat-console__enemy ${enemy.alive ? "" : "is-defeated"}`}
             >
-              <div style={{ display: "flex", justifyContent: "space-between" }}>
-                <span style={{ fontWeight: 600 }}>{enemy.name}</span>
-                <span style={{ fontSize: 12 }}>
-                  HP: {Math.max(0, enemy.stats.HP)}
-                </span>
+              <div className="combat-console__enemy-row">
+                <span className="combat-console__enemy-name">{enemy.name}</span>
+                <span className="combat-console__enemy-meta">HP: {Math.max(0, enemy.stats.HP)}</span>
               </div>
-              <div style={{ fontSize: 11, opacity: 0.7 }}>
+              <div className="combat-console__enemy-status">
                 {enemy.alive ? "Active" : "Defeated"}
               </div>
             </div>
@@ -317,44 +279,22 @@ export default function CombatConsole() {
         </div>
       </div>
 
-      <div
-        style={{
-          borderTop: "1px solid rgba(255,255,255,0.08)",
-          paddingTop: 10,
-          display: "grid",
-          gap: 6,
-        }}
-      >
-        <div style={{ fontSize: 12, textTransform: "uppercase", opacity: 0.7 }}>Combat Log</div>
-        <div
-          style={{
-            maxHeight: 140,
-            overflowY: "auto",
-            display: "grid",
-            gap: 4,
-          }}
-          aria-live="polite"
-        >
+      <div className="combat-console__log">
+        <div className="combat-console__section-label">Combat Log</div>
+        <div className="combat-console__log-scroll" aria-live="polite">
           {log.length === 0 && (
-            <div style={{ fontSize: 12, opacity: 0.6 }}>Awaiting actions...</div>
+            <div className="combat-console__empty">Awaiting actions...</div>
           )}
           {log.map((line, index) => (
             <div
               key={`${index}-${line}`}
-              style={{
-                fontSize: 12,
-                lineHeight: 1.4,
-                background: "rgba(255,255,255,0.05)",
-                padding: "6px 8px",
-                borderRadius: 6,
-              }}
+              className="combat-console__log-line"
             >
               {line}
             </div>
           ))}
         </div>
       </div>
-    </div>
+    </section>
   );
 }
-

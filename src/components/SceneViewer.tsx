@@ -12,6 +12,7 @@ export default function SceneViewer({
   showOverlay = false,
   overlayCentered = false,
   floor,
+  className,
 }: {
   roomType: RoomType;
   sceneId: string | null;
@@ -21,6 +22,7 @@ export default function SceneViewer({
   showOverlay?: boolean;
   overlayCentered?: boolean;
   floor?: number;
+  className?: string;
 }) {
   const [imgError, setImgError] = useState(false);
   const [usedFallback, setUsedFallback] = useState(false);
@@ -46,6 +48,7 @@ export default function SceneViewer({
 
   return (
     <div
+      className={className}
       style={{
         position: "relative",
         width: "100%",

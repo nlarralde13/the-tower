@@ -34,6 +34,7 @@ const rat: EnemyContract = {
   ],
   tags: ["beast"],
   loot: {
+    // Point this profileId at a different loot table to change rat drops.
     profileId: "slug",
   },
 };

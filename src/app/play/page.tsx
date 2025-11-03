@@ -4,12 +4,12 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import PageSurface from "@/components/PageSurface";
 import SceneViewer from "@/components/SceneViewer";
 import ThumbBar from "@/components/ThumbBar";
-import CombatRoot from "@/components/combat/CombatRoot";
-import CombatConsole from "@/components/combat/CombatConsole";
-import { useRunStore, type RoomRewardRecord } from "@/store/runStore";
+import CombatOverlay from "@/components/combat/CombatOverlay";
+import { useRunStore } from "@/store/runStore";
 import { chooseFlavor, exitsFlavor } from "@/game/flavor";
 import { getEnemyDefinition } from "@/content/index";
 import { useRouter, useSearchParams } from "next/navigation";
+import { playMusic } from "@/utils/audioManager";
 
 export default function PlayPage() {
   const router = useRouter();
@@ -29,15 +29,17 @@ export default function PlayPage() {
   const completedRooms = useRunStore((s) => s.completedRooms);
   const mode = useRunStore((s) => s.mode);
   const activeCombat = useRunStore((s) => s.activeCombat);
-  const roomRewards = useRunStore((s) => s.roomRewards);
   const defeatOverlay = useRunStore((s) => s.defeatOverlay);
 
   const [actionMsg, setActionMsg] = useState<string>("");
   // Mobile slide-in drawers
   const [leftOpen, setLeftOpen] = useState(false);
   const [rightOpen, setRightOpen] = useState(false);
-  const [inspectOpen, setInspectOpen] = useState(false);
   const liveRef = useRef<HTMLDivElement | null>(null);
+
+  //AUDIO
+  playMusic("/audio/tower_theme.mp3")
+
 
   useEffect(() => {
     resume();
@@ -57,10 +59,6 @@ export default function PlayPage() {
 
   const currentType = useMemo(() => (pos && grid ? roomTypeAt(pos.x, pos.y) : null), [pos, grid, roomTypeAt]);
   const currentKey = pos ? `${currentFloor}:${pos.x},${pos.y}` : null;
-  const currentReward = useMemo(() => {
-    if (!currentKey) return null;
-    return roomRewards[currentKey] ?? null;
-  }, [roomRewards, currentKey]);
   const caption = useMemo(() => {
     if (!currentType || !grid || !pos) return undefined;
     const dirs: string[] = [];
@@ -98,15 +96,7 @@ export default function PlayPage() {
     return caption;
   }, [mode, combatCaption, caption, currentKey, completedRooms]);
 
-  useEffect(() => {
-    setInspectOpen(false);
-  }, [currentKey]);
-
-  useEffect(() => {
-    if (mode === "combat") {
-      setInspectOpen(false);
-    }
-  }, [mode]);
+  const combatActive = mode === "combat";
 
   function announce(msg: string) {
     setActionMsg(msg);
@@ -121,7 +111,6 @@ export default function PlayPage() {
 
   useEffect(() => {
     if (defeatOverlay) {
-      setInspectOpen(false);
       announce("You have been defeated. A piece of your soul lingers.");
     }
   }, [defeatOverlay]);
@@ -135,22 +124,10 @@ export default function PlayPage() {
       announce("No time to inspect during combat.");
       return;
     }
-    if (!currentReward) {
-      announce("Nothing of value remains.");
-      setInspectOpen(false);
-      return;
-    }
-    setInspectOpen(true);
-    announce("You sift through the remains and uncover loot.");
-  };
-
-  const handleCloseInspect = () => {
-    setInspectOpen(false);
-    announce("Inspection closed.");
+    announce("Review the journal for the latest after-action docket.");
   };
 
   const handleEndRun = () => {
-    setInspectOpen(false);
     endRun?.();
     announce("Run ended. Returning home.");
     router.push("/");
@@ -224,41 +201,25 @@ export default function PlayPage() {
 
         {/* Middle: scene + controls in a console frame */}
         <section className="play-middle">
-          <div className="console-frame">
-            {mode === "combat" ? (
-              <CombatRoot>
-                <div style={{ display: "grid", gap: 16 }}>
-                  <SceneViewer
-                    roomType={(currentType ?? "empty") as any}
-                    sceneId={sceneId}
-                    caption={viewerCaption}
-                    grid={grid}
-                    playerPos={pos}
-                    showOverlay={showOverlay}
-                    overlayCentered
-                    floor={useRunStore.getState().currentFloor}
-                  />
-                  <CombatConsole />
-                </div>
-              </CombatRoot>
-            ) : (
-              <>
-                <div style={{ position: "relative" }}>
-                  <SceneViewer
-                    roomType={(currentType ?? "empty") as any}
-                    sceneId={sceneId}
-                    caption={viewerCaption}
-                    grid={grid}
-                    playerPos={pos}
-                    showOverlay={showOverlay}
-                    overlayCentered
-                    floor={useRunStore.getState().currentFloor}
-                  />
-                  {inspectOpen && currentReward ? (
-                    <LootInspectPanel reward={currentReward} onClose={handleCloseInspect} />
-                  ) : null}
-                </div>
-                {currentReward && !inspectOpen ? <RewardSummary reward={currentReward} /> : null}
+          <div className={`console-frame ${combatActive ? "console-frame--combat" : ""}`}>
+            <div
+              className="console-frame__content"
+              aria-hidden={combatActive}
+            >
+              <div className={`scene-surface ${combatActive ? "scene-surface--locked" : ""}`}>
+                <SceneViewer
+                  className={`scene-viewer${combatActive ? " scene-viewer--dimmed" : ""}`}
+                  roomType={(currentType ?? "empty") as any}
+                  sceneId={sceneId}
+                  caption={viewerCaption}
+                  grid={grid}
+                  playerPos={pos}
+                  showOverlay={showOverlay}
+                  overlayCentered
+                  floor={useRunStore.getState().currentFloor}
+                />
+              </div>
+              {!combatActive ? (
                 <ThumbBar
                   onMove={(d) => {
                     if (defeatOverlay) {
@@ -294,10 +255,11 @@ export default function PlayPage() {
                     window.scrollTo({ top: 0, behavior: "instant" as ScrollBehavior });
                   }}
                   showAscend={showAscend}
-                  disabled={inspectOpen || defeatOverlay}
+                  disabled={defeatOverlay}
                 />
-              </>
-            )}
+              ) : null}
+            </div>
+            <CombatOverlay active={combatActive} />
           </div>
 
           {/* Mobile: floating toggles for side drawers */}
@@ -319,16 +281,7 @@ export default function PlayPage() {
           {atFinalExit && (
             <FinalExtract onExtract={() => { endRun?.(); router.push("/climb"); }} />
           )}
-          {!atFinalExit && (
-            <div className="menu-panel" aria-label="Journal">
-              <div className="panel-title">Journal</div>
-              <ul className="menu-list">
-                <li><div className="menu-link"><span className="menu-label">Objective: Reach Floor 5</span><span className="menu-chev">•</span><span className="menu-sub">The guild awaits your report</span></div></li>
-                <li><div className="menu-link"><span className="menu-label">Rumor: Hidden Librarium</span><span className="menu-chev">•</span><span className="menu-sub">A tome on Runic Binding exists</span></div></li>
-                <li><div className="menu-link"><span className="menu-label">Lore: The Brass Wardens</span><span className="menu-chev">•</span><span className="menu-sub">Order that guards the 5th ascent</span></div></li>
-              </ul>
-            </div>
-          )}
+          {!atFinalExit && <JournalPanel />}
         </div>
 
         {/* Mobile slide-in drawers */}
@@ -394,78 +347,6 @@ export default function PlayPage() {
   );
 }
 
-type LootDropRecord = RoomRewardRecord["drops"][number];
-type LootRarity = LootDropRecord["rarity"];
-
-type RarityTheme = {
-  bg: string;
-  solid: string;
-  border: string;
-  text: string;
-  textMuted: string;
-  accentBg: string;
-  accentBorder: string;
-};
-
-const RARITY_THEMES: Record<LootRarity, RarityTheme> = {
-  common: {
-    bg: "linear-gradient(135deg, rgba(148,163,184,0.12), rgba(71,85,105,0.18))",
-    solid: "linear-gradient(135deg, rgba(148,163,184,0.45), rgba(100,116,139,0.6))",
-    border: "rgba(148,163,184,0.45)",
-    text: "#f8fafc",
-    textMuted: "rgba(226,232,240,0.85)",
-    accentBg: "rgba(148,163,184,0.28)",
-    accentBorder: "rgba(226,232,240,0.55)",
-  },
-  uncommon: {
-    bg: "linear-gradient(135deg, rgba(34,197,94,0.12), rgba(6,95,70,0.22))",
-    solid: "linear-gradient(135deg, rgba(34,197,94,0.55), rgba(22,163,74,0.75))",
-    border: "rgba(34,197,94,0.45)",
-    text: "#f0fdf4",
-    textMuted: "rgba(203,255,227,0.82)",
-    accentBg: "rgba(34,197,94,0.28)",
-    accentBorder: "rgba(187,247,208,0.6)",
-  },
-  rare: {
-    bg: "linear-gradient(135deg, rgba(59,130,246,0.12), rgba(29,78,216,0.22))",
-    solid: "linear-gradient(135deg, rgba(59,130,246,0.55), rgba(37,99,235,0.78))",
-    border: "rgba(59,130,246,0.45)",
-    text: "#eff6ff",
-    textMuted: "rgba(191,219,254,0.85)",
-    accentBg: "rgba(59,130,246,0.26)",
-    accentBorder: "rgba(191,219,254,0.62)",
-  },
-  epic: {
-    bg: "linear-gradient(135deg, rgba(168,85,247,0.14), rgba(109,40,217,0.24))",
-    solid: "linear-gradient(135deg, rgba(168,85,247,0.58), rgba(126,34,206,0.82))",
-    border: "rgba(168,85,247,0.48)",
-    text: "#faf5ff",
-    textMuted: "rgba(233,213,255,0.82)",
-    accentBg: "rgba(168,85,247,0.32)",
-    accentBorder: "rgba(233,213,255,0.65)",
-  },
-  legendary: {
-    bg: "linear-gradient(135deg, rgba(250,204,21,0.15), rgba(217,119,6,0.25))",
-    solid: "linear-gradient(135deg, rgba(234,179,8,0.62), rgba(202,138,4,0.85))",
-    border: "rgba(250,204,21,0.52)",
-    text: "#fff7ed",
-    textMuted: "rgba(254,240,138,0.85)",
-    accentBg: "rgba(250,204,21,0.35)",
-    accentBorder: "rgba(254,243,199,0.7)",
-  },
-};
-
-function getRarityTheme(rarity: LootRarity): RarityTheme {
-  return RARITY_THEMES[rarity] ?? RARITY_THEMES.common;
-}
-
-function toTitle(input: string): string {
-  return input
-    .split(/[-_\s]+/)
-    .filter(Boolean)
-    .map((segment) => segment.charAt(0).toUpperCase() + segment.slice(1))
-    .join(" ");
-}
 
 function formatDropSource(source?: string | null): string | null {
   if (!source) return null;
@@ -480,221 +361,6 @@ function formatDropSource(source?: string | null): string | null {
   return `Logged source: ${source}`;
 }
 
-function LootInspectRow({ drop }: { drop: LootDropRecord }) {
-  const theme = getRarityTheme(drop.rarity);
-  const initial = drop.name.charAt(0).toUpperCase();
-  const quantityLabel = drop.quantity > 1 ? `×${drop.quantity}` : "×1";
-  const rarityLabel = toTitle(drop.rarity);
-  const categoryLabel = toTitle(drop.category);
-  const sourceLabel = formatDropSource(drop.source);
-
-  return (
-    <div
-      style={{
-        display: "grid",
-        gridTemplateColumns: "auto 1fr",
-        gap: 14,
-        padding: "12px 14px",
-        borderRadius: 12,
-        border: `1px solid ${theme.border}`,
-        background: theme.bg,
-      }}
-    >
-      <div
-        aria-hidden
-        style={{
-          width: 64,
-          height: 64,
-          borderRadius: 14,
-          background: theme.solid,
-          border: `1px solid ${theme.border}`,
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "center",
-          fontWeight: 700,
-          fontSize: 22,
-          color: theme.text,
-          textShadow: "0 1px 2px rgba(0,0,0,0.4)",
-        }}
-      >
-        {initial}
-      </div>
-      <div style={{ display: "grid", gap: 6 }}>
-        <div
-          style={{
-            display: "flex",
-            justifyContent: "space-between",
-            alignItems: "baseline",
-            gap: 12,
-          }}
-        >
-          <span style={{ fontWeight: 600, fontSize: 16, color: theme.text }}>{drop.name}</span>
-          <span style={{ fontSize: 12, opacity: 0.8, color: theme.textMuted }}>{quantityLabel}</span>
-        </div>
-        <div style={{ display: "flex", flexWrap: "wrap", gap: 8, fontSize: 12 }}>
-          <span
-            style={{
-              padding: "3px 8px",
-              borderRadius: 999,
-              border: `1px solid ${theme.accentBorder}`,
-              background: theme.accentBg,
-              color: theme.text,
-              textTransform: "uppercase",
-              letterSpacing: 0.08,
-            }}
-          >
-            {rarityLabel}
-          </span>
-          <span
-            style={{
-              padding: "3px 8px",
-              borderRadius: 999,
-              border: "1px solid rgba(255,255,255,0.14)",
-              background: "rgba(255,255,255,0.06)",
-              color: theme.textMuted,
-            }}
-          >
-            {categoryLabel}
-          </span>
-          <span
-            style={{
-              padding: "3px 8px",
-              borderRadius: 999,
-              border: "1px solid rgba(255,255,255,0.14)",
-              background: "rgba(255,255,255,0.04)",
-              color: theme.textMuted,
-            }}
-          >
-            Qty {drop.quantity}
-          </span>
-        </div>
-        <div style={{ fontSize: 13, lineHeight: 1.5, color: theme.textMuted }}>
-          {drop.description ?? "No description available for this item yet."}
-        </div>
-        {sourceLabel ? (
-          <div
-            style={{
-              fontSize: 11,
-              textTransform: "uppercase",
-              letterSpacing: 0.08,
-              color: "rgba(255,255,255,0.55)",
-            }}
-          >
-            {sourceLabel}
-          </div>
-        ) : null}
-      </div>
-    </div>
-  );
-}
-
-function LootInspectPanel({ reward, onClose }: { reward: RoomRewardRecord; onClose: () => void }) {
-  const hasDrops = reward.drops.length > 0;
-  return (
-    <div
-      role="dialog"
-      aria-modal="true"
-      aria-label="Recovered loot"
-      style={{
-        position: "absolute",
-        inset: 0,
-        background: "rgba(10,8,18,0.78)",
-        backdropFilter: "blur(6px)",
-        display: "flex",
-        alignItems: "center",
-        justifyContent: "center",
-        padding: 16,
-        zIndex: 5,
-      }}
-      onClick={onClose}
-    >
-      <div
-        onClick={(event) => event.stopPropagation()}
-        style={{
-          width: "min(560px, 100%)",
-          maxHeight: "92%",
-          overflowY: "auto",
-          padding: "20px 22px",
-          borderRadius: 18,
-          border: "1px solid rgba(231,215,167,0.32)",
-          background: "linear-gradient(180deg, rgba(30,24,45,0.95), rgba(16,13,28,0.92))",
-          boxShadow: "0 32px 64px rgba(0,0,0,0.48)",
-          display: "grid",
-          gap: 18,
-        }}
-      >
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 12 }}>
-          <div>
-            <div style={{ fontWeight: 600, fontSize: 16, color: "#f5f3ff" }}>{reward.header}</div>
-            <div style={{ marginTop: 6, fontSize: 13, color: "rgba(226,220,255,0.8)" }}>{reward.intro}</div>
-          </div>
-          <button
-            onClick={onClose}
-            aria-label="Close inspection"
-            style={{
-              border: "1px solid rgba(231,215,167,0.45)",
-              background: "rgba(0,0,0,0.35)",
-              color: "#f8fafc",
-              borderRadius: 10,
-              padding: "6px 12px",
-              fontSize: 12,
-              cursor: "pointer",
-            }}
-          >
-            Close
-          </button>
-        </div>
-        <div style={{ display: "grid", gap: 12 }}>
-          {hasDrops ? (
-            reward.drops.map((drop) => (
-              <LootInspectRow key={`${drop.id}-${drop.rarity}-${drop.quantity}`} drop={drop} />
-            ))
-          ) : (
-            <div
-              style={{
-                fontSize: 13,
-                color: "rgba(226,220,255,0.78)",
-                padding: "14px 16px",
-                borderRadius: 12,
-                border: "1px dashed rgba(231,215,167,0.32)",
-                background: "rgba(21,17,32,0.65)",
-              }}
-            >
-              No tangible loot recovered. Clerk annotations follow below.
-            </div>
-          )}
-        </div>
-        <div>
-          <div
-            style={{
-              fontSize: 12,
-              textTransform: "uppercase",
-              letterSpacing: 0.08,
-              color: "rgba(231,215,167,0.75)",
-              marginBottom: 6,
-            }}
-          >
-            Clerk Notes
-          </div>
-          <ul
-            style={{
-              margin: 0,
-              paddingLeft: 18,
-              display: "grid",
-              gap: 6,
-              fontSize: 13,
-              color: "rgba(226,220,255,0.8)",
-            }}
-          >
-            {reward.items.map((line, idx) => (
-              <li key={`${idx}-${line}`} style={{ lineHeight: 1.5 }}>{line}</li>
-            ))}
-          </ul>
-        </div>
-      </div>
-    </div>
-  );
-}
 
 function DefeatOverlay({ onEndRun }: { onEndRun: () => void }) {
   return (
@@ -754,42 +420,6 @@ function DefeatOverlay({ onEndRun }: { onEndRun: () => void }) {
   );
 }
 
-function RewardSummary({ reward }: { reward: RoomRewardRecord }) {
-  return (
-    <div
-      role="status"
-      aria-label="Reward summary"
-      style={{
-        marginTop: 12,
-        padding: "14px 16px",
-        borderRadius: 12,
-        border: "1px solid rgba(231,215,167,0.28)",
-        background: "rgba(18,15,26,0.72)",
-        display: "grid",
-        gap: 8,
-        boxShadow: "0 18px 30px rgba(0,0,0,0.35)",
-      }}
-    >
-      <div style={{ fontWeight: 600, fontSize: 15 }}>{reward.header}</div>
-      <div style={{ fontSize: 13, color: "var(--color-muted, #cbd5e1)" }}>{reward.intro}</div>
-      <ul
-        style={{
-          margin: 0,
-          paddingLeft: 18,
-          listStyle: "disc",
-          display: "grid",
-          gap: 4,
-          fontSize: 13,
-          color: "var(--color-muted, #d1d5db)",
-        }}
-      >
-        {reward.items.map((line, idx) => (
-          <li key={idx} style={{ lineHeight: 1.5 }}>{line}</li>
-        ))}
-      </ul>
-    </div>
-  );
-}
 
 function FinalExtract({ onExtract }: { onExtract: () => void }) {
   return (

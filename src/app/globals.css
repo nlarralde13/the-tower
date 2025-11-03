@@ -595,3 +595,325 @@ main {
 @media (min-width: 1024px) {
   .console-frame { padding: 16px; border-radius: 24px; }
 }
+
+.console-frame {
+  position: relative;
+}
+
+.console-frame__content {
+  display: grid;
+  gap: 16px;
+  transition: opacity 300ms ease;
+}
+
+.console-frame--combat .console-frame__content {
+  pointer-events: none;
+  user-select: none;
+}
+
+.scene-surface {
+  position: relative;
+}
+
+.scene-surface--locked {
+  pointer-events: none;
+}
+
+.scene-viewer {
+  transition: filter 420ms ease, opacity 420ms ease;
+}
+
+.scene-viewer::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  background: var(--combat-overlay-scrim, rgba(10,8,18,0.45));
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 420ms ease;
+}
+
+.scene-viewer--dimmed {
+  filter: blur(3px) brightness(0.6);
+}
+
+.scene-viewer--dimmed::after {
+  opacity: 1;
+}
+
+/* ---------- Combat overlay layer ---------- */
+:root {
+  --combat-overlay-backdrop: rgba(10,8,18,0.68);
+  --combat-overlay-surface-bg: rgba(16,13,24,0.92);
+  --combat-overlay-surface-border: rgba(236,229,200,0.28);
+  --combat-overlay-glow: 0 28px 60px rgba(0,0,0,0.55);
+  --combat-overlay-player-bg: rgba(34,197,94,0.14);
+  --combat-overlay-player-border: rgba(34,197,94,0.4);
+  --combat-overlay-enemy-bg: rgba(239,68,68,0.14);
+  --combat-overlay-enemy-border: rgba(239,68,68,0.38);
+  --combat-overlay-log-bg: rgba(255,255,255,0.07);
+  --combat-overlay-log-border: rgba(255,255,255,0.12);
+  --combat-overlay-scrim: rgba(10,8,18,0.45);
+}
+
+.combat-overlay {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: stretch;
+  justify-content: center;
+  padding: clamp(16px, 4vw, 32px);
+  background: var(--combat-overlay-backdrop);
+  backdrop-filter: blur(6px);
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 420ms ease;
+  z-index: 65;
+}
+
+.combat-overlay--visible {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+.combat-overlay--leaving {
+  pointer-events: none;
+}
+
+.combat-overlay__surface {
+  width: min(960px, 100%);
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+  border-radius: 24px;
+  border: 1px solid var(--combat-overlay-surface-border);
+  background: var(--combat-overlay-surface-bg);
+  box-shadow: 0 0 0 1px rgba(255,255,255,0.04), var(--combat-overlay-glow);
+  color: #f9fafb;
+  padding: clamp(18px, 3vw, 28px);
+}
+
+@media (max-width: 768px) {
+  .combat-overlay__surface {
+    border-radius: 18px;
+    padding: clamp(16px, 6vw, 22px);
+  }
+}
+
+.combat-console {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+  flex: 1;
+  min-height: 0;
+}
+
+.combat-console--empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  background: rgba(0,0,0,0.35);
+  border-radius: 18px;
+  border: 1px solid rgba(255,255,255,0.12);
+  padding: 24px;
+}
+
+.combat-console__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.combat-console__label {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  opacity: 0.72;
+}
+
+.combat-console__value {
+  font-weight: 600;
+  font-size: 16px;
+}
+
+.combat-console__turn {
+  font-size: 12px;
+  padding: 6px 14px;
+  border-radius: 999px;
+  border: 1px solid rgba(255,255,255,0.24);
+  background: rgba(255,255,255,0.12);
+  box-shadow: 0 6px 16px rgba(0,0,0,0.25);
+  font-weight: 600;
+}
+
+.combat-console__turn.is-pending {
+  background: rgba(234,179,8,0.2);
+  border-color: rgba(234,179,8,0.35);
+}
+
+.combat-console__panels {
+  display: grid;
+  gap: 18px;
+}
+
+@media (min-width: 768px) {
+  .combat-console__panels {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+.combat-console__panel {
+  border-radius: 18px;
+  padding: 18px;
+  border: 1px solid rgba(255,255,255,0.14);
+  background: rgba(15,13,24,0.72);
+  box-shadow: inset 0 0 0 1px rgba(255,255,255,0.04);
+  display: grid;
+  gap: 10px;
+}
+
+.combat-console__panel-heading {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 10px;
+}
+
+.combat-console__panel-title {
+  font-weight: 600;
+  font-size: 17px;
+}
+
+.combat-console__panel-meta {
+  font-size: 13px;
+  opacity: 0.8;
+}
+
+.combat-console__panel--player {
+  background: var(--combat-overlay-player-bg);
+  border-color: var(--combat-overlay-player-border);
+  box-shadow: 0 12px 30px rgba(34,197,94,0.12);
+}
+
+.combat-console__panel--enemies {
+  background: var(--combat-overlay-enemy-bg);
+  border-color: var(--combat-overlay-enemy-border);
+  box-shadow: 0 12px 30px rgba(239,68,68,0.14);
+}
+
+.combat-console__section-label {
+  margin-top: 4px;
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  opacity: 0.72;
+}
+
+.combat-console__actions {
+  display: grid;
+  gap: 10px;
+}
+
+.combat-console__action {
+  border-radius: 12px;
+  border: 1px solid rgba(255,255,255,0.12);
+  background: rgba(255,255,255,0.05);
+  padding: 10px 12px;
+  text-align: left;
+  display: grid;
+  gap: 4px;
+  transition: transform 160ms ease, box-shadow 160ms ease, background 160ms ease;
+  font-weight: 500;
+  cursor: pointer;
+}
+
+.combat-console__action:hover:not(:disabled) {
+  background: rgba(255,255,255,0.14);
+  transform: translateY(-1px);
+  box-shadow: 0 12px 24px rgba(0,0,0,0.25);
+}
+
+.combat-console__action:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.combat-console__action-name {
+  font-weight: 600;
+}
+
+.combat-console__action-meta {
+  font-size: 12px;
+  opacity: 0.72;
+}
+
+.combat-console__empty {
+  font-size: 12px;
+  opacity: 0.7;
+}
+
+.combat-console__enemy {
+  border-radius: 12px;
+  border: 1px solid rgba(255,255,255,0.14);
+  background: rgba(255,255,255,0.05);
+  padding: 10px 12px;
+  display: grid;
+  gap: 4px;
+  transition: opacity 200ms ease;
+}
+
+.combat-console__enemy.is-defeated {
+  opacity: 0.6;
+  background: rgba(15,23,42,0.55);
+}
+
+.combat-console__enemy-row {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  font-size: 13px;
+}
+
+.combat-console__enemy-name {
+  font-weight: 600;
+}
+
+.combat-console__enemy-meta {
+  font-size: 12px;
+  opacity: 0.75;
+}
+
+.combat-console__enemy-status {
+  font-size: 11px;
+  opacity: 0.7;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+
+.combat-console__log {
+  display: grid;
+  gap: 8px;
+  border-top: 1px solid var(--combat-overlay-log-border);
+  padding-top: 12px;
+}
+
+.combat-console__log-scroll {
+  max-height: 160px;
+  overflow-y: auto;
+  display: grid;
+  gap: 6px;
+  padding-right: 4px;
+}
+
+.combat-console__log-line {
+  background: var(--combat-overlay-log-bg);
+  border-radius: 10px;
+  padding: 6px 10px;
+  font-size: 13px;
+  line-height: 1.45;
+  box-shadow: inset 0 0 0 1px rgba(255,255,255,0.05);
+}
