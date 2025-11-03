@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useCombatStore } from "@/state/combatStore";
@@ -111,34 +111,49 @@ export default function CombatConsole() {
     setLog((prev) => [...prev, ...entries].slice(-12));
   }, [lastResolution, encounter]);
 
-  useEffect(() => {
-    if (!pending) return;
+    useEffect(() => {
     if (!encounter) {
       setPending(false);
+      if (scheduledRef.current) {
+        clearTimeout(scheduledRef.current);
+        scheduledRef.current = null;
+      }
       return;
     }
+
     const enemiesAlive = enemies.some((enemy) => enemy.alive);
     if (!enemiesAlive) {
-      setPending(false);
+      if (pending) setPending(false);
+      if (scheduledRef.current) {
+        clearTimeout(scheduledRef.current);
+        scheduledRef.current = null;
+      }
       return;
     }
-    if (activeSide === "enemy" && !scheduledRef.current) {
-      scheduledRef.current = setTimeout(() => {
-        advanceTurn();
-        if (scheduledRef.current) {
-          clearTimeout(scheduledRef.current);
+
+    if (activeSide === "enemy") {
+      if (!scheduledRef.current) {
+        setPending(true);
+        scheduledRef.current = setTimeout(() => {
+          advanceTurn();
           scheduledRef.current = null;
-        }
-        setPending(false);
-      }, 500);
+        }, 500);
+      }
+    } else {
+      if (scheduledRef.current) {
+        clearTimeout(scheduledRef.current);
+        scheduledRef.current = null;
+      }
+      if (pending) setPending(false);
     }
+
     return () => {
       if (scheduledRef.current && activeSide !== "enemy") {
         clearTimeout(scheduledRef.current);
         scheduledRef.current = null;
       }
     };
-  }, [activeSide, pending, advanceTurn, encounter, enemies]);
+  }, [activeSide, advanceTurn, encounter, enemies, pending]);
 
   useEffect(() => {
     return () => {

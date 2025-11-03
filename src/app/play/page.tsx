@@ -25,6 +25,8 @@ export default function PlayPage() {
   const ascend = useRunStore((s) => s.ascend);
   const endRun = useRunStore((s) => s.endRun);
   const showOverlay = useRunStore((s) => s.dev.gridOverlay);
+  const currentFloor = useRunStore((s) => s.currentFloor ?? 0);
+  const completedRooms = useRunStore((s) => s.completedRooms);
   const mode = useRunStore((s) => s.mode);
   const activeCombat = useRunStore((s) => s.activeCombat);
 
@@ -51,18 +53,21 @@ export default function PlayPage() {
   }, [runId, router]);
 
   const currentType = useMemo(() => (pos && grid ? roomTypeAt(pos.x, pos.y) : null), [pos, grid, roomTypeAt]);
+  const currentKey = pos ? `${currentFloor}:${pos.x},${pos.y}` : null;
   const caption = useMemo(() => {
     if (!currentType || !grid || !pos) return undefined;
     const dirs: string[] = [];
     const passable = new Set(["entry","exit","boss","combat","trap","loot","out","special","empty"]);
     const W = grid.width, H = grid.height;
-    const can = (x: number, y: number) => x >= 0 && y >= 0 && x < W && y < H && passable.has(grid.cells[y*W + x].type);
+    const can = (x: number, y: number) => x >= 0 && y >= 0 && x < W && y < H && passable.has(grid.cells[y * W + x].type);
     if (can(pos.x, pos.y - 1)) dirs.push("north");
     if (can(pos.x, pos.y + 1)) dirs.push("south");
     if (can(pos.x - 1, pos.y)) dirs.push("west");
     if (can(pos.x + 1, pos.y)) dirs.push("east");
     return `${chooseFlavor(currentType)} ${exitsFlavor(dirs)}`.trim();
   }, [currentType, grid, pos]);
+
+  const clearedRoomMessage = "The enemy was defeated and the room is now clear to move on.";
 
   const combatCaption = useMemo(() => {
     if (!activeCombat) return undefined;
@@ -76,8 +81,15 @@ export default function PlayPage() {
     if (mode === "combat") {
       return combatCaption ?? caption;
     }
+    if (
+      currentKey &&
+      completedRooms?.[currentKey]
+    ) {
+      const base = caption ?? "";
+      return `${base} ${clearedRoomMessage}`.trim();
+    }
     return caption;
-  }, [mode, combatCaption, caption]);
+  }, [mode, combatCaption, caption, currentKey, completedRooms]);
 
   function announce(msg: string) {
     setActionMsg(msg);

@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import React from "react";
 
@@ -53,7 +53,6 @@ export default function ThumbBar({
         <span />
         <BigButton
           label="North"
-          icon="↑"
           ariaLabel="Move north"
           onClick={() => !disabled && onMove("north")}
           disabled={disabled}
@@ -61,7 +60,6 @@ export default function ThumbBar({
         <span />
         <BigButton
           label="West"
-          icon="←"
           ariaLabel="Move west"
           onClick={() => !disabled && onMove("west")}
           disabled={disabled}
@@ -69,7 +67,6 @@ export default function ThumbBar({
         <span />
         <BigButton
           label="East"
-          icon="→"
           ariaLabel="Move east"
           onClick={() => !disabled && onMove("east")}
           disabled={disabled}
@@ -77,7 +74,6 @@ export default function ThumbBar({
         <span />
         <BigButton
           label="South"
-          icon="↓"
           ariaLabel="Move south"
           onClick={() => !disabled && onMove("south")}
           disabled={disabled}

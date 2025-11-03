@@ -116,6 +116,8 @@ function drawFromPool(pools: ScenePools, type: RoomType): { path: string; pools:
   return { path: choice ?? defaultPath, pools: updated };
 }
 
+const ROOM_CLEAR_MESSAGE = "The enemy was defeated and the room is now clear to move on.";
+
 const DEFAULT_PLAYER_TEMPLATE: StartEncounterState["player"] = {
   id: "runner",
   name: "Runner",
@@ -401,8 +403,9 @@ export const useRunStore = create<RunState & RunActions>((set, get) => ({
         y: ny,
         enemies,
       };
-    } else if (target.type === "combat" && alreadyCleared) {
-      entry.message = "The area remains quiet.";
+    }
+    if (alreadyCleared && !entry.message) {
+      entry.message = ROOM_CLEAR_MESSAGE;
     }
 
     const nextState: Partial<RunState> = {
@@ -448,7 +451,7 @@ export const useRunStore = create<RunState & RunActions>((set, get) => ({
     }
 
     const outcome = victory
-      ? "Victory! Room cleared."
+      ? ROOM_CLEAR_MESSAGE
       : "Defeat... you were forced to retreat.";
     const journal = appendOutcomeMessage(
       s.journal ?? [],

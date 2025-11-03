@@ -1,0 +1,42 @@
+diff --git a/src/app/play/page.tsx b/src/app/play/page.tsx
+@@
+   function announce(msg: string) {
+     setActionMsg(msg);
+     // trigger SR re-read
+     requestAnimationFrame(() => {
+       if (liveRef.current) {
+         (liveRef.current as HTMLDivElement).textContent = "";
+         (liveRef.current as HTMLDivElement).textContent = msg;
+       }
+     });
+   }
+ 
++  useEffect(() => {
++    const previous = prevModeRef.current;
++    if (previous !== mode) {
++      if (mode === "combat") {
++        announce("Combat initiated.");
++      } else if (previous === "combat" && mode === "explore") {
++        announce(clearedRoomMessage);
++      }
++      prevModeRef.current = mode;
++    }
++  }, [mode, clearedRoomMessage]);
++
++  useEffect(() => {
++    if (
++      mode === "explore" &&
++      currentType === "combat" &&
++      currentKey &&
++      completedRooms?.[currentKey]
++    ) {
++      if (announcedClearedRef.current !== currentKey) {
++        announce(clearedRoomMessage);
++      }
++      announcedClearedRef.current = currentKey;
++      return;
++    }
++    announcedClearedRef.current = null;
++  }, [mode, currentType, currentKey, completedRooms, clearedRoomMessage]);
++
+   function handleBack() {
