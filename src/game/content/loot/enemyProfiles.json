@@ -1,0 +1,106 @@
+{
+  "default": {
+    "name": "Baseline Creature",
+    "dropChance": 0.65,
+    "rolls": 1,
+    "rarityMultipliers": {
+      "common": 1,
+      "uncommon": 1,
+      "rare": 1,
+      "epic": 1,
+      "legendary": 1
+    },
+    "categoryMultipliers": {
+      "items": 1,
+      "weapons": 1,
+      "armor": 1,
+      "potions": 1,
+      "skills": 1,
+      "currency": 1
+    }
+  },
+  "goblin": {
+    "inherits": "default",
+    "name": "Greedy Goblin",
+    "dropChance": 0.95,
+    "rolls": 2,
+    "rarityMultipliers": {
+      "common": 0.8,
+      "uncommon": 1.15,
+      "rare": 1.25,
+      "epic": 1.35,
+      "legendary": 1.45
+    },
+    "categoryMultipliers": {
+      "items": 1.1,
+      "weapons": 1.05,
+      "armor": 1,
+      "potions": 1.2,
+      "skills": 1.05,
+      "currency": 1.35
+    }
+  },
+  "slug": {
+    "inherits": "default",
+    "name": "Tower Slug",
+    "dropChance": 0.15,
+    "rolls": 1,
+    "rarityMultipliers": {
+      "common": 1,
+      "uncommon": 0.6,
+      "rare": 0.3,
+      "epic": 0.15,
+      "legendary": 0.05
+    },
+    "categoryMultipliers": {
+      "items": 0.4,
+      "weapons": 0.2,
+      "armor": 0.2,
+      "potions": 0.5,
+      "skills": 0.1,
+      "currency": 0.6
+    }
+  },
+  "construct": {
+    "inherits": "default",
+    "name": "Arcane Construct",
+    "dropChance": 0.75,
+    "rolls": 1,
+    "rarityMultipliers": {
+      "common": 0.9,
+      "uncommon": 1.1,
+      "rare": 1.2,
+      "epic": 1.25,
+      "legendary": 1.3
+    },
+    "categoryMultipliers": {
+      "items": 1.15,
+      "weapons": 0.9,
+      "armor": 1,
+      "potions": 0.8,
+      "skills": 1.25,
+      "currency": 0.95
+    }
+  },
+  "cultist": {
+    "inherits": "default",
+    "name": "Fanatic Cultist",
+    "dropChance": 0.8,
+    "rolls": 1,
+    "rarityMultipliers": {
+      "common": 0.95,
+      "uncommon": 1.05,
+      "rare": 1.2,
+      "epic": 1.3,
+      "legendary": 1.35
+    },
+    "categoryMultipliers": {
+      "items": 0.9,
+      "weapons": 0.95,
+      "armor": 0.9,
+      "potions": 0.85,
+      "skills": 1.5,
+      "currency": 0.8
+    }
+  }
+}
