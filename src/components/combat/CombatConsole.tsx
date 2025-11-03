@@ -5,6 +5,7 @@ import { useCombatStore } from "@/state/combatStore";
 import { useRunStore } from "@/store/runStore";
 import type { CombatEntity, Encounter, Resolution } from "@/engine/combat/types";
 import { getActionDefinition } from "@/content/index";
+import { useHaptics } from "@/hooks/useHaptics";
 
 function getEntity(encounter: Encounter | null, id: string) {
   if (!encounter) return null;
@@ -71,6 +72,7 @@ export default function CombatConsole() {
   const activeSide = useCombatStore((state) => state.getActiveSide());
   const activeCombat = useRunStore((state) => state.activeCombat);
   const logCombatEvents = useRunStore((state) => state.logCombatEvents);
+  const { trigger: triggerHaptic } = useHaptics();
 
   const [log, setLog] = useState<string[]>([]);
   const [pending, setPending] = useState(false);
@@ -112,6 +114,17 @@ export default function CombatConsole() {
     const entries = describeResolution(lastResolution, encounter);
     if (entries.length === 0) return;
     setLog((prev) => [...prev, ...entries].slice(-12));
+    if (lastResolution.events) {
+      for (const event of lastResolution.events) {
+        if (event.type !== "damage") continue;
+        const target = getEntity(encounter, event.targetId);
+        if (target?.faction === "enemy") {
+          triggerHaptic("attack_hit");
+        } else if (target?.faction === "player") {
+          triggerHaptic("attack_taken");
+        }
+      }
+    }
     logCombatEvents({
       encounterId: encounter.id,
       floor: activeCombat?.floor ?? 0,
@@ -120,7 +133,7 @@ export default function CombatConsole() {
         : undefined,
       lines: entries,
     });
-  }, [lastResolution, encounter, logCombatEvents, activeCombat]);
+  }, [lastResolution, encounter, logCombatEvents, activeCombat, triggerHaptic]);
 
     useEffect(() => {
     if (!encounter) {

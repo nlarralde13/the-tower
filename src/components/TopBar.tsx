@@ -1,122 +1,74 @@
-﻿// components/TopBar.tsx
+// components/TopBar.tsx
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 import Link from "next/link";
+import { useRunStore } from "@/store/runStore";
 import styles from "./TopBar.module.css";
 
-type Gauge = { current: number; max: number };
-type PlayerStats = {
-  hp: Gauge;
-  mp: Gauge;
-  stamina: Gauge;
-};
-
 type TopBarProps = {
-  playerStats?: PlayerStats;
   signedIn?: boolean;
   displayName?: string;
 };
 
-function pct(g: Gauge) {
-  const max = Math.max(1, g.max ?? 1);
-  const cur = Math.max(0, Math.min(g.current ?? 0, max));
-  return Math.round((cur / max) * 100);
-}
-
-export default function TopBar({
-  playerStats = {
-    hp: { current: 32, max: 40 },
-    mp: { current: 18, max: 28 },
-    stamina: { current: 54, max: 60 },
-  },
-  signedIn,
-  displayName,
-}: TopBarProps) {
+export default function TopBar({ signedIn, displayName }: TopBarProps) {
   const [open, setOpen] = useState(false);
-  const drawerRef = useRef<HTMLDivElement | null>(null);
+  const currentFloor = useRunStore((state) => state.currentFloor ?? 0);
 
-  // Close drawer on route change (best-effort without router events)
+  // Close drawer on route hash change (best effort)
   useEffect(() => {
     const onHash = () => setOpen(false);
     window.addEventListener("hashchange", onHash);
     return () => window.removeEventListener("hashchange", onHash);
   }, []);
 
-  // Close on Esc
+  // Close on Escape
   useEffect(() => {
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") setOpen(false);
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setOpen(false);
     };
     document.addEventListener("keydown", onKey);
     return () => document.removeEventListener("keydown", onKey);
   }, []);
 
-  const hpPct = pct(playerStats.hp);
-  const mpPct = pct(playerStats.mp);
-  const stPct = pct(playerStats.stamina);
-
   return (
     <>
       <div className={styles.bar}>
-        {/* Burger */}
         <button
           className={`${styles.burger} ${open ? styles.burgerOpen : ""}`}
-          aria-label="Open menu"
+          aria-label="Toggle menu"
           aria-expanded={open}
           aria-controls="nav-drawer"
-          onClick={() => setOpen((v) => !v)}
+          onClick={() => setOpen((value) => !value)}
         >
           <span />
           <span />
           <span />
         </button>
 
-        {/* HUD meters */}
-        <div className={styles.hud} role="status" aria-live="polite">
-          <Meter
-            label="HP"
-            icon="?"
-            percent={hpPct}
-            text={`${playerStats.hp.current}/${playerStats.hp.max}`}
-            colorVar="--hp"
-          />
-          <Meter
-            label="MP"
-            icon="??"
-            percent={mpPct}
-            text={`${playerStats.mp.current}/${playerStats.mp.max}`}
-            colorVar="--mp"
-          />
-          <Meter
-            label="STA"
-            icon="?"
-            percent={stPct}
-            text={`${playerStats.stamina.current}/${playerStats.stamina.max}`}
-            colorVar="--st"
-          />
+        <div className={styles.floorBadge} role="status" aria-live="polite">
+          <span className={styles.floorLabel}>Floor</span>
+          <span className={styles.floorValue}>{currentFloor.toString().padStart(2, "0")}</span>
         </div>
 
-        {/* Right spacer keeps layout tidy if you later add icons */}
-        <div className={styles.rightSpacer} aria-hidden="true" />
+        <div aria-hidden="true" className={styles.rightSpacer} />
       </div>
 
-      {/* Scrim */}
       <button
         className={`${styles.scrim} ${open ? styles.scrimVisible : ""}`}
         aria-label="Close menu"
         onClick={() => setOpen(false)}
       />
 
-      {/* Drawer */}
       <nav
         id="nav-drawer"
-        ref={drawerRef}
         className={`${styles.drawer} ${open ? styles.drawerOpen : ""}`}
         aria-hidden={!open}
       >
         <div className={styles.drawerHeader}>
-          <div className={styles.brandDot} aria-hidden="true">TT</div>
+          <div className={styles.brandDot} aria-hidden="true">
+            TT
+          </div>
           <div className={styles.brandCopy}>
             <div className={styles.brandTitle}>The Tower</div>
             <div className={styles.brandSubtitle}>
@@ -126,14 +78,42 @@ export default function TopBar({
         </div>
 
         <ul className={styles.menuList}>
-          <li><Link href="/" className={styles.menuLink} onClick={() => setOpen(false)}>?? Home</Link></li>
-          <li><Link href="/climb" className={styles.menuLink} onClick={() => setOpen(false)}>?? Climb the Tower</Link></li>
-          <li><Link href="/traders" className={styles.menuLink} onClick={() => setOpen(false)}>?? Traders’ Guild</Link></li>
-          <li><Link href="/crafters" className={styles.menuLink} onClick={() => setOpen(false)}>?? Crafters’ Guild</Link></li>
-          <li><Link href="/inn" className={styles.menuLink} onClick={() => setOpen(false)}>?? The Inn</Link></li>
-          <li><Link href="/training" className={styles.menuLink} onClick={() => setOpen(false)}>?? Training Grounds</Link></li>
+          <li>
+            <Link href="/" className={styles.menuLink} onClick={() => setOpen(false)}>
+              ?? Home
+            </Link>
+          </li>
+          <li>
+            <Link href="/climb" className={styles.menuLink} onClick={() => setOpen(false)}>
+              ?? Climb the Tower
+            </Link>
+          </li>
+          <li>
+            <Link href="/traders" className={styles.menuLink} onClick={() => setOpen(false)}>
+              ?? Traders’ Guild
+            </Link>
+          </li>
+          <li>
+            <Link href="/crafters" className={styles.menuLink} onClick={() => setOpen(false)}>
+              ?? Crafters’ Guild
+            </Link>
+          </li>
+          <li>
+            <Link href="/inn" className={styles.menuLink} onClick={() => setOpen(false)}>
+              ?? The Inn
+            </Link>
+          </li>
+          <li>
+            <Link href="/training" className={styles.menuLink} onClick={() => setOpen(false)}>
+              ?? Training Grounds
+            </Link>
+          </li>
           <li className={styles.rule} aria-hidden="true" />
-          <li><Link href="/settings" className={styles.menuLink} onClick={() => setOpen(false)}>?? Settings</Link></li>
+          <li>
+            <Link href="/settings" className={styles.menuLink} onClick={() => setOpen(false)}>
+              ?? Settings
+            </Link>
+          </li>
           <li>
             <Link
               href={signedIn ? "/api/auth/signout" : "/api/auth/signin"}
@@ -146,32 +126,5 @@ export default function TopBar({
         </ul>
       </nav>
     </>
-  );
-}
-
-function Meter({
-  label,
-  icon,
-  percent,
-  text,
-  colorVar,
-}: {
-  label: string;
-  icon: string;
-  percent: number;
-  text: string;
-  colorVar: "--hp" | "--mp" | "--st";
-}) {
-  return (
-    <div className={styles.meter} data-color={colorVar}>
-      <div className={styles.meterHeader} aria-hidden="true">
-        <span className={styles.meterIcon}>{icon}</span>
-        <span className={styles.meterLabel}>{label}</span>
-      </div>
-      <div className={styles.meterBar} role="progressbar" aria-valuenow={percent} aria-valuemin={0} aria-valuemax={100}>
-        <div className={styles.meterFill} style={{ width: `${percent}%` }} />
-        <div className={styles.meterText}>{text}</div>
-      </div>
-    </div>
   );
 }

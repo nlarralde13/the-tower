@@ -18,6 +18,7 @@ type PreferencesState = {
   highContrast: boolean;
   textLarge: boolean;
   haptics: boolean;
+  hapticsIntensity: number;
   // NEW: audio prefs
   musicEnabled: boolean;   // toggle background music
   musicVolume: number;     // 0..1 float
@@ -30,6 +31,7 @@ type PreferencesContextValue = {
   setHighContrast: (value: boolean) => void;
   setTextLarge: (value: boolean) => void;
   setHaptics: (value: boolean) => void;
+  setHapticsIntensity: (value: number) => void;
   // NEW setters
   setMusicEnabled: (value: boolean) => void;
   setMusicVolume: (value: number) => void; // expects 0..1
@@ -40,6 +42,7 @@ const DEFAULT_STATE: PreferencesState = {
   highContrast: false,
   textLarge: false,
   haptics: false,
+  hapticsIntensity: 0.7,
   // NEW defaults
   musicEnabled: true,
   musicVolume: 0.4,
@@ -50,6 +53,7 @@ const STORAGE_KEYS = {
   highContrast: "pref:hc",
   textLarge: "pref:textlg",
   haptics: "pref:haptics",
+  hapticsIntensity: "pref:haptics:intensity",
   // NEW keys
   musicEnabled: "pref:music",
   musicVolume: "pref:musicVol",
@@ -85,6 +89,7 @@ export function PreferencesProvider({ children }: { children: ReactNode }) {
       highContrast: parseFlag(localStorage.getItem(STORAGE_KEYS.highContrast)),
       textLarge: parseFlag(localStorage.getItem(STORAGE_KEYS.textLarge)),
       haptics: parseFlag(localStorage.getItem(STORAGE_KEYS.haptics)),
+      hapticsIntensity: parseVolume(localStorage.getItem(STORAGE_KEYS.hapticsIntensity), DEFAULT_STATE.hapticsIntensity),
       musicEnabled: parseFlag(localStorage.getItem(STORAGE_KEYS.musicEnabled)) ?? DEFAULT_STATE.musicEnabled,
       musicVolume: parseVolume(localStorage.getItem(STORAGE_KEYS.musicVolume), DEFAULT_STATE.musicVolume),
     };
@@ -104,6 +109,7 @@ export function PreferencesProvider({ children }: { children: ReactNode }) {
       localStorage.setItem(STORAGE_KEYS.highContrast, state.highContrast ? "on" : "off");
       localStorage.setItem(STORAGE_KEYS.textLarge, state.textLarge ? "on" : "off");
       localStorage.setItem(STORAGE_KEYS.haptics, state.haptics ? "on" : "off");
+      localStorage.setItem(STORAGE_KEYS.hapticsIntensity, String(state.hapticsIntensity));
       // NEW: audio prefs
       localStorage.setItem(STORAGE_KEYS.musicEnabled, state.musicEnabled ? "on" : "off");
       localStorage.setItem(STORAGE_KEYS.musicVolume, String(state.musicVolume));
@@ -147,6 +153,11 @@ export function PreferencesProvider({ children }: { children: ReactNode }) {
     setState((prev) => (prev.haptics === value ? prev : { ...prev, haptics: value }));
   }, []);
 
+  const setHapticsIntensity = useCallback((value: number) => {
+    const clamped = Math.max(0, Math.min(1, value));
+    setState((prev) => (prev.hapticsIntensity === clamped ? prev : { ...prev, hapticsIntensity: clamped }));
+  }, []);
+
   // NEW audio setters
   const setMusicEnabled = useCallback((value: boolean) => {
     setState((prev) => (prev.musicEnabled === value ? prev : { ...prev, musicEnabled: value }));
@@ -165,10 +176,21 @@ export function PreferencesProvider({ children }: { children: ReactNode }) {
       setHighContrast,
       setTextLarge,
       setHaptics,
+      setHapticsIntensity,
       setMusicEnabled,
       setMusicVolume,
     }),
-    [state, hydrated, setRetro, setHighContrast, setTextLarge, setHaptics, setMusicEnabled, setMusicVolume]
+    [
+      state,
+      hydrated,
+      setRetro,
+      setHighContrast,
+      setTextLarge,
+      setHaptics,
+      setHapticsIntensity,
+      setMusicEnabled,
+      setMusicVolume,
+    ]
   );
 
   return <PreferencesContext.Provider value={value}>{children}</PreferencesContext.Provider>;

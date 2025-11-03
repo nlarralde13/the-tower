@@ -16,12 +16,14 @@ export default function SettingsPage() {
     setHighContrast,
     setTextLarge,
     setHaptics,
+    setHapticsIntensity,
     // NEW
     setMusicEnabled,
     setMusicVolume,
   } = usePreferences();
 
   const volumePercent = Math.round((state.musicVolume ?? 0) * 100);
+  const hapticsPercent = Math.round((state.hapticsIntensity ?? 0) * 100);
 
   return (
     <PageSurface
@@ -104,6 +106,24 @@ export default function SettingsPage() {
                   <span className="settings-hint">Prep for future tremor feedback. Currently cosmetic.</span>
                 </span>
               </label>
+
+              <div className="range-row" style={{ marginLeft: 32 }}>
+                <label htmlFor="haptics-intensity">
+                  <strong>Intensity</strong>
+                  <span className="settings-hint" style={{ marginLeft: 8 }}>{hapticsPercent}%</span>
+                </label>
+                <input
+                  id="haptics-intensity"
+                  type="range"
+                  min={0}
+                  max={100}
+                  step={5}
+                  value={hapticsPercent}
+                  onChange={(e) => setHapticsIntensity(Number(e.target.value) / 100)}
+                  disabled={!state.haptics}
+                  aria-label="Haptics intensity"
+                />
+              </div>
             </div>
           </fieldset>
 
