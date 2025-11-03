@@ -1,0 +1,90 @@
+{
+  "rarity": [
+    {
+      "floor": 1,
+      "weights": {
+        "common": 60,
+        "uncommon": 28,
+        "rare": 9,
+        "epic": 3,
+        "legendary": 0.5
+      }
+    },
+    {
+      "floor": 10,
+      "weights": {
+        "common": 48,
+        "uncommon": 32,
+        "rare": 14,
+        "epic": 5.5,
+        "legendary": 0.8
+      }
+    },
+    {
+      "floor": 25,
+      "weights": {
+        "common": 35,
+        "uncommon": 33,
+        "rare": 18,
+        "epic": 11,
+        "legendary": 3
+      }
+    },
+    {
+      "floor": 40,
+      "weights": {
+        "common": 26,
+        "uncommon": 30,
+        "rare": 23,
+        "epic": 15,
+        "legendary": 6
+      }
+    }
+  ],
+  "category": [
+    {
+      "floor": 1,
+      "weights": {
+        "items": 22,
+        "weapons": 18,
+        "armor": 16,
+        "potions": 24,
+        "skills": 8,
+        "currency": 12
+      }
+    },
+    {
+      "floor": 10,
+      "weights": {
+        "items": 18,
+        "weapons": 20,
+        "armor": 18,
+        "potions": 22,
+        "skills": 12,
+        "currency": 10
+      }
+    },
+    {
+      "floor": 25,
+      "weights": {
+        "items": 16,
+        "weapons": 22,
+        "armor": 21,
+        "potions": 18,
+        "skills": 15,
+        "currency": 8
+      }
+    },
+    {
+      "floor": 40,
+      "weights": {
+        "items": 12,
+        "weapons": 23,
+        "armor": 22,
+        "potions": 16,
+        "skills": 19,
+        "currency": 8
+      }
+    }
+  ]
+}

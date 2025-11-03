@@ -1,0 +1,51 @@
+{
+  "ember-queen": {
+    "name": "Ember Queen",
+    "floorHint": 10,
+    "guaranteed": [
+      { "lootId": "ember-heart", "quantity": 1 }
+    ],
+    "choices": [
+      {
+        "choose": 1,
+        "options": [
+          { "lootId": "sunforge-warhammer" },
+          { "lootId": "dragonblood-phial" },
+          { "lootId": "chronoshift-elixir", "quantity": 2 }
+        ]
+      },
+      {
+        "choose": 1,
+        "options": [
+          { "lootId": "tower-scrip", "quantity": { "min": 40, "max": 60, "perFloor": 1.5 } },
+          { "lootId": "prismatic-obols", "quantity": { "min": 3, "max": 4, "perFloor": 0.5 } }
+        ]
+      }
+    ]
+  },
+  "boreal-regent": {
+    "name": "Boreal Regent",
+    "floorHint": 20,
+    "guaranteed": [
+      { "lootId": "glacial-diadem", "quantity": 1 }
+    ],
+    "choices": [
+      {
+        "choose": 1,
+        "options": [
+          { "lootId": "aeon-ward" },
+          { "lootId": "starbound-mantle" },
+          { "lootId": "umbra-domination" }
+        ]
+      },
+      {
+        "choose": 2,
+        "options": [
+          { "lootId": "gilded-marks", "quantity": { "min": 20, "max": 35, "perFloor": 1 } },
+          { "lootId": "soul-tithe", "quantity": { "min": 6, "max": 9, "perFloor": 0.6 } },
+          { "lootId": "veil-draught", "quantity": 2 }
+        ]
+      }
+    ]
+  }
+}

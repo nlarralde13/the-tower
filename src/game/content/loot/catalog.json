@@ -1,0 +1,314 @@
+{
+  "items": [
+    {
+      "id": "tower-map-fragment",
+      "name": "Tower Map Fragment",
+      "rarity": "common",
+      "minFloor": 1,
+      "maxFloor": 15,
+      "weight": 1.2,
+      "description": "A scrap of parchment revealing a nearby secret chamber."
+    },
+    {
+      "id": "clockwork-core",
+      "name": "Clockwork Core",
+      "rarity": "uncommon",
+      "minFloor": 5,
+      "maxFloor": 40,
+      "weight": 0.9,
+      "description": "Salvaged arcane machinery that powers the tower's constructs."
+    },
+    {
+      "id": "soul-prism",
+      "name": "Soul Prism",
+      "rarity": "rare",
+      "minFloor": 10,
+      "maxFloor": 60,
+      "weight": 0.65,
+      "description": "Crystallized ambition harvested from fallen challengers."
+    },
+    {
+      "id": "astral-chronicle",
+      "name": "Astral Chronicle",
+      "rarity": "epic",
+      "minFloor": 20,
+      "maxFloor": 99,
+      "weight": 0.35,
+      "description": "Records a single moment in time that can be relived in meditation."
+    },
+    {
+      "id": "paradox-compass",
+      "name": "Paradox Compass",
+      "rarity": "legendary",
+      "minFloor": 30,
+      "maxFloor": 99,
+      "weight": 0.22,
+      "description": "Points toward the floor where fate most fears your arrival."
+    }
+  ],
+  "weapons": [
+    {
+      "id": "rusted-gladius",
+      "name": "Rusted Gladius",
+      "rarity": "common",
+      "minFloor": 1,
+      "maxFloor": 12,
+      "weight": 1.4,
+      "description": "Seen better centuries but still eager for battle."
+    },
+    {
+      "id": "stormcaller-spear",
+      "name": "Stormcaller Spear",
+      "rarity": "uncommon",
+      "minFloor": 6,
+      "maxFloor": 40,
+      "weight": 0.95,
+      "description": "Whispers when thunder is near."
+    },
+    {
+      "id": "void-etched-rapier",
+      "name": "Void-Etched Rapier",
+      "rarity": "rare",
+      "minFloor": 12,
+      "maxFloor": 60,
+      "weight": 0.7,
+      "description": "Slices through distance as easily as flesh."
+    },
+    {
+      "id": "sunforge-warhammer",
+      "name": "Sunforge Warhammer",
+      "rarity": "epic",
+      "minFloor": 22,
+      "maxFloor": 99,
+      "weight": 0.4,
+      "description": "Stores solar fury for catastrophic release."
+    },
+    {
+      "id": "crownbreaker-blade",
+      "name": "Crownbreaker Blade",
+      "rarity": "legendary",
+      "minFloor": 32,
+      "maxFloor": 99,
+      "weight": 0.18,
+      "description": "Ends dynasties with contemptuous ease."
+    }
+  ],
+  "armor": [
+    {
+      "id": "patched-leathers",
+      "name": "Patched Leathers",
+      "rarity": "common",
+      "minFloor": 1,
+      "maxFloor": 12,
+      "weight": 1.5,
+      "description": "Every patch tells a story of poor decisions."
+    },
+    {
+      "id": "mirrorweave-mail",
+      "name": "Mirrorweave Mail",
+      "rarity": "uncommon",
+      "minFloor": 7,
+      "maxFloor": 40,
+      "weight": 0.95,
+      "description": "Bends light and blades alike."
+    },
+    {
+      "id": "gravetide-plate",
+      "name": "Gravetide Plate",
+      "rarity": "rare",
+      "minFloor": 14,
+      "maxFloor": 60,
+      "weight": 0.65,
+      "description": "Negates mortality as a polite suggestion."
+    },
+    {
+      "id": "starbound-mantle",
+      "name": "Starbound Mantle",
+      "rarity": "epic",
+      "minFloor": 24,
+      "maxFloor": 99,
+      "weight": 0.38,
+      "description": "Sheds cosmic dust that hardens when struck."
+    },
+    {
+      "id": "aeon-ward",
+      "name": "Aeon Ward",
+      "rarity": "legendary",
+      "minFloor": 34,
+      "maxFloor": 99,
+      "weight": 0.2,
+      "description": "Freezes the moment of impact between heartbeats."
+    }
+  ],
+  "potions": [
+    {
+      "id": "ember-tonic",
+      "name": "Ember Tonic",
+      "rarity": "common",
+      "minFloor": 1,
+      "maxFloor": 20,
+      "weight": 1.6,
+      "description": "Restores warmth to chilled limbs.",
+      "quantity": { "min": 1, "max": 2 }
+    },
+    {
+      "id": "veil-draught",
+      "name": "Veil Draught",
+      "rarity": "uncommon",
+      "minFloor": 8,
+      "maxFloor": 45,
+      "weight": 1.1,
+      "description": "Bends sight around the imbiber.",
+      "quantity": { "min": 1, "max": 1 }
+    },
+    {
+      "id": "chronoshift-elixir",
+      "name": "Chronoshift Elixir",
+      "rarity": "rare",
+      "minFloor": 15,
+      "maxFloor": 65,
+      "weight": 0.7,
+      "description": "Briefly rewinds personal time."
+    },
+    {
+      "id": "dragonblood-phial",
+      "name": "Dragonblood Phial",
+      "rarity": "epic",
+      "minFloor": 26,
+      "maxFloor": 99,
+      "weight": 0.42,
+      "description": "Ignites veins with draconic vigor.",
+      "quantity": { "min": 1, "max": 1 }
+    },
+    {
+      "id": "seraphic-ichor",
+      "name": "Seraphic Ichor",
+      "rarity": "legendary",
+      "minFloor": 36,
+      "maxFloor": 99,
+      "weight": 0.2,
+      "description": "Divine distillate said to banish death twice."
+    }
+  ],
+  "skills": [
+    {
+      "id": "echoing-step",
+      "name": "Echoing Step",
+      "rarity": "common",
+      "minFloor": 1,
+      "maxFloor": 18,
+      "weight": 1.3,
+      "description": "Afterimages confuse hostile eyes."
+    },
+    {
+      "id": "gravitas-pulse",
+      "name": "Gravitas Pulse",
+      "rarity": "uncommon",
+      "minFloor": 9,
+      "maxFloor": 45,
+      "weight": 1,
+      "description": "Compress enemies with a sudden pressure wave."
+    },
+    {
+      "id": "astral-rend",
+      "name": "Astral Rend",
+      "rarity": "rare",
+      "minFloor": 18,
+      "maxFloor": 70,
+      "weight": 0.68,
+      "description": "Tear open the night sky above your foes."
+    },
+    {
+      "id": "umbra-domination",
+      "name": "Umbra Domination",
+      "rarity": "epic",
+      "minFloor": 28,
+      "maxFloor": 99,
+      "weight": 0.36,
+      "description": "Command shadows to fight as loyal thralls."
+    },
+    {
+      "id": "mythic-resurgence",
+      "name": "Mythic Resurgence",
+      "rarity": "legendary",
+      "minFloor": 38,
+      "maxFloor": 99,
+      "weight": 0.18,
+      "description": "Surge of ancestral power rewriting destiny."
+    }
+  ],
+  "currency": [
+    {
+      "id": "tower-scrip",
+      "name": "Tower Scrip",
+      "rarity": "common",
+      "minFloor": 1,
+      "maxFloor": 99,
+      "weight": 1.8,
+      "description": "Exchangeable notes minted by the Tower custodians.",
+      "quantity": { "min": 8, "max": 16, "perFloor": 0.6 }
+    },
+    {
+      "id": "gilded-marks",
+      "name": "Gilded Marks",
+      "rarity": "uncommon",
+      "minFloor": 8,
+      "maxFloor": 99,
+      "weight": 1.1,
+      "description": "Heavier coins recognized by highborn merchants.",
+      "quantity": { "min": 5, "max": 10, "perFloor": 0.9 }
+    },
+    {
+      "id": "soul-tithe",
+      "name": "Soul Tithe",
+      "rarity": "rare",
+      "minFloor": 16,
+      "maxFloor": 99,
+      "weight": 0.7,
+      "description": "Crystalline currency redeemable only in forbidden markets.",
+      "quantity": { "min": 2, "max": 4, "perFloor": 0.6 }
+    },
+    {
+      "id": "prismatic-obols",
+      "name": "Prismatic Obols",
+      "rarity": "epic",
+      "minFloor": 28,
+      "maxFloor": 99,
+      "weight": 0.35,
+      "description": "Each coin contains a trapped wish.",
+      "quantity": { "min": 1, "max": 2, "perFloor": 0.4 }
+    },
+    {
+      "id": "eternal-signet",
+      "name": "Eternal Signet",
+      "rarity": "legendary",
+      "minFloor": 36,
+      "maxFloor": 99,
+      "weight": 0.16,
+      "description": "A singular ring traded only among immortals.",
+      "quantity": { "min": 1, "max": 1, "perFloor": 0 }
+    }
+  ],
+  "uniques": [
+    {
+      "id": "ember-heart",
+      "name": "Ember Heart",
+      "rarity": "legendary",
+      "minFloor": 1,
+      "maxFloor": 99,
+      "weight": 0,
+      "description": "Still-burning heart of the Ember Queen.",
+      "unique": true
+    },
+    {
+      "id": "glacial-diadem",
+      "name": "Glacial Diadem",
+      "rarity": "legendary",
+      "minFloor": 1,
+      "maxFloor": 99,
+      "weight": 0,
+      "description": "Frozen crown claimed from the Boreal Regent.",
+      "unique": true
+    }
+  ]
+}
