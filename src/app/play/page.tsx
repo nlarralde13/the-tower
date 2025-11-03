@@ -4,8 +4,11 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import PageSurface from "@/components/PageSurface";
 import SceneViewer from "@/components/SceneViewer";
 import ThumbBar from "@/components/ThumbBar";
+import CombatRoot from "@/components/combat/CombatRoot";
+import CombatConsole from "@/components/combat/CombatConsole";
 import { useRunStore } from "@/store/runStore";
 import { chooseFlavor, exitsFlavor } from "@/game/flavor";
+import { getEnemyDefinition } from "@/content/index";
 import { useRouter, useSearchParams } from "next/navigation";
 
 export default function PlayPage() {
@@ -22,6 +25,8 @@ export default function PlayPage() {
   const ascend = useRunStore((s) => s.ascend);
   const endRun = useRunStore((s) => s.endRun);
   const showOverlay = useRunStore((s) => s.dev.gridOverlay);
+  const mode = useRunStore((s) => s.mode);
+  const activeCombat = useRunStore((s) => s.activeCombat);
 
   const [actionMsg, setActionMsg] = useState<string>("");
   // Mobile slide-in drawers
@@ -59,6 +64,21 @@ export default function PlayPage() {
     return `${chooseFlavor(currentType)} ${exitsFlavor(dirs)}`.trim();
   }, [currentType, grid, pos]);
 
+  const combatCaption = useMemo(() => {
+    if (!activeCombat) return undefined;
+    const names = activeCombat.enemies
+      .map((id) => getEnemyDefinition(id)?.name ?? id)
+      .join(", ");
+    return names ? `You engage ${names}.` : "Combat engaged.";
+  }, [activeCombat]);
+
+  const viewerCaption = useMemo(() => {
+    if (mode === "combat") {
+      return combatCaption ?? caption;
+    }
+    return caption;
+  }, [mode, combatCaption, caption]);
+
   function announce(msg: string) {
     setActionMsg(msg);
     // trigger SR re-read
@@ -69,6 +89,19 @@ export default function PlayPage() {
       }
     });
   }
+
+  const prevModeRef = useRef(mode);
+  useEffect(() => {
+    const previous = prevModeRef.current;
+    if (previous !== mode) {
+      if (mode === "combat") {
+        announce("Combat initiated.");
+      } else if (previous === "combat" && mode === "explore") {
+        announce("Combat resolved.");
+      }
+      prevModeRef.current = mode;
+    }
+  }, [mode]);
 
   function handleBack() {
     if (confirm("Leave the current run and return to the climb?") === true) {
@@ -124,45 +157,68 @@ export default function PlayPage() {
         {/* Middle: scene + controls in a console frame */}
         <section className="play-middle">
           <div className="console-frame">
-            <SceneViewer
-              roomType={(currentType ?? "empty") as any}
-              sceneId={sceneId}
-              caption={caption}
-              grid={grid}
-              playerPos={pos}
-              showOverlay={showOverlay}
-              overlayCentered
-              floor={useRunStore.getState().currentFloor}
-            />
-            <ThumbBar
-              onMove={(d) => {
-                if (!grid || !pos) return;
-                const passable = new Set(["entry","exit","boss","combat","trap","loot","out","special","empty"]);
-                const W = grid.width, H = grid.height;
-                let nx = pos.x, ny = pos.y;
-                if (d === "north") ny -= 1;
-                if (d === "south") ny += 1;
-                if (d === "west") nx -= 1;
-                if (d === "east") nx += 1;
-                if (nx < 0 || ny < 0 || nx >= W || ny >= H) {
-                  announce("Why are you running face first into that wall?");
-                  return;
-                }
-                const t = grid.cells[ny * W + nx];
-                if (!t || !passable.has(t.type)) {
-                  announce("Why are you running face first into that wall?");
-                  return;
-                }
-                move(d);
-              }}
-              onInspect={() => announce("Inspect (stub)")}
-              onUse={() => announce("Use (stub)")}
-              onDefend={() => announce("Defend (stub)")}
-              onFlee={() => announce("Flee (stub)")}
-              onBack={handleBack}
-              onAscend={async () => { await ascend?.(); window.scrollTo({ top: 0, behavior: "instant" as ScrollBehavior }); }}
-              showAscend={showAscend}
-            />
+            {mode === "combat" ? (
+              <CombatRoot>
+                <div style={{ display: "grid", gap: 16 }}>
+                  <SceneViewer
+                    roomType={(currentType ?? "empty") as any}
+                    sceneId={sceneId}
+                    caption={viewerCaption}
+                    grid={grid}
+                    playerPos={pos}
+                    showOverlay={showOverlay}
+                    overlayCentered
+                    floor={useRunStore.getState().currentFloor}
+                  />
+                  <CombatConsole />
+                </div>
+              </CombatRoot>
+            ) : (
+              <>
+                <SceneViewer
+                  roomType={(currentType ?? "empty") as any}
+                  sceneId={sceneId}
+                  caption={viewerCaption}
+                  grid={grid}
+                  playerPos={pos}
+                  showOverlay={showOverlay}
+                  overlayCentered
+                  floor={useRunStore.getState().currentFloor}
+                />
+                <ThumbBar
+                  onMove={(d) => {
+                    if (!grid || !pos) return;
+                    const passable = new Set(["entry","exit","boss","combat","trap","loot","out","special","empty"]);
+                    const W = grid.width, H = grid.height;
+                    let nx = pos.x, ny = pos.y;
+                    if (d === "north") ny -= 1;
+                    if (d === "south") ny += 1;
+                    if (d === "west") nx -= 1;
+                    if (d === "east") nx += 1;
+                    if (nx < 0 || ny < 0 || nx >= W || ny >= H) {
+                      announce("Why are you running face first into that wall?");
+                      return;
+                    }
+                    const t = grid.cells[ny * W + nx];
+                    if (!t || !passable.has(t.type)) {
+                      announce("Why are you running face first into that wall?");
+                      return;
+                    }
+                    move(d);
+                  }}
+                  onInspect={() => announce("Inspect (stub)")}
+                  onUse={() => announce("Use (stub)")}
+                  onDefend={() => announce("Defend (stub)")}
+                  onFlee={() => announce("Flee (stub)")}
+                  onBack={handleBack}
+                  onAscend={async () => {
+                    await ascend?.();
+                    window.scrollTo({ top: 0, behavior: "instant" as ScrollBehavior });
+                  }}
+                  showAscend={showAscend}
+                />
+              </>
+            )}
           </div>
 
           {/* Mobile: floating toggles for side drawers */}

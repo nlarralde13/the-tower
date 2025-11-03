@@ -4,6 +4,10 @@ import { create } from "zustand";
 import type { FloorGrid, RoomType, FloorConfig, FloorSeed } from "@/types/tower";
 import { buildFloorSeedFromTemplate } from "@/engine/runFactory";
 import { generateFloorFromSeed } from "@/engine/generateFloor";
+import { useCombatStore } from "@/state/combatStore";
+import { getActionDefinition } from "@/content/index";
+import type { StartEncounterState } from "@/engine/combat/engine";
+import type { Encounter } from "@/engine/combat/types";
 
 type Point = { x: number; y: number };
 
@@ -18,6 +22,7 @@ type JournalEntry = {
   y: number;
   type: RoomType;
   scene: string | null;
+  message?: string;
 };
 
 export type RunState = {
@@ -31,6 +36,13 @@ export type RunState = {
   sceneId: string | null; // last shown scene path
   pools: ScenePools; // per-roomType pools for non-repeating selection
   journal: JournalEntry[];
+  completedRooms: Record<string, boolean>;
+  activeCombat: {
+    floor: number;
+    x: number;
+    y: number;
+    enemies: string[];
+  } | null;
   dev: {
     gridOverlay: boolean;
   };
@@ -45,6 +57,7 @@ type RunActions = {
   _devSetRunFromSeed?: (floor: number, floorSeed: number) => Promise<void>;
   ascend?: () => Promise<void>;
   endRun?: () => void;
+  completeCombat: (opts: { victory: boolean }) => void;
 };
 
 const STORAGE_KEY = "runState:v1";
@@ -103,6 +116,93 @@ function drawFromPool(pools: ScenePools, type: RoomType): { path: string; pools:
   return { path: choice ?? defaultPath, pools: updated };
 }
 
+const DEFAULT_PLAYER_TEMPLATE: StartEncounterState["player"] = {
+  id: "runner",
+  name: "Runner",
+  stats: {
+    HP: 120,
+    ATK: 24,
+    DEF: 12,
+    INT: 18,
+    RES: 14,
+    SPD: 16,
+    LUCK: 10,
+  },
+  resources: { focus: 2, stamina: 3 },
+  actions: ["defend"],
+  items: ["starter-sword", "starter-staff", "buckler"],
+};
+
+function buildPlayerEncounterState(encounterIndex: number): StartEncounterState {
+  return {
+    player: {
+      ...DEFAULT_PLAYER_TEMPLATE,
+      stats: { ...DEFAULT_PLAYER_TEMPLATE.stats },
+      resources: { ...DEFAULT_PLAYER_TEMPLATE.resources },
+      actions: [...(DEFAULT_PLAYER_TEMPLATE.actions ?? [])],
+      items: [...(DEFAULT_PLAYER_TEMPLATE.items ?? [])],
+    },
+    accessibility: { autoGood: false },
+    encounterIndex,
+  };
+}
+
+function selectEncounterEnemies(floor: number): string[] {
+  if (floor >= 4) {
+    return ["acolyte", "rat"];
+  }
+  if (floor >= 2) {
+    return ["acolyte"];
+  }
+  return ["rat"];
+}
+
+function roomKey(floor: number, x: number, y: number) {
+  return `${floor}:${x},${y}`;
+}
+
+function formatInitiativeJournal(encounter: Encounter | null): string | undefined {
+  if (!encounter) return undefined;
+  if (encounter.initiative.first === "player") {
+    return "Initiative: You acted first.";
+  }
+  const firstEnemyId = encounter.order.find((id) => {
+    const entity = encounter.entities[id];
+    return entity?.faction === "enemy" && entity.alive;
+  });
+  if (!firstEnemyId) {
+    return "Initiative: The enemy moved first.";
+  }
+  const enemyEntity = encounter.entities[firstEnemyId];
+  if (!enemyEntity) {
+    return "Initiative: The enemy moved first.";
+  }
+  const bestPlan = (enemyEntity.aiPlan ?? [])
+    .slice()
+    .sort((a, b) => (b.weight ?? 0) - (a.weight ?? 0))[0];
+  const fallbackAction =
+    enemyEntity.actions.length > 0 ? enemyEntity.actions[0].contract.id : undefined;
+  const actionId = bestPlan?.actionId ?? fallbackAction;
+  const actionName = actionId ? getActionDefinition(actionId)?.name ?? actionId : "an attack";
+  return `Initiative: ${enemyEntity.name} struck first with ${actionName}.`;
+}
+
+function appendOutcomeMessage(
+  entries: JournalEntry[],
+  target: { floor: number; x: number; y: number },
+  message: string
+): JournalEntry[] {
+  if (entries.length === 0) return [...entries];
+  const lastIndex = entries.length - 1;
+  const last = entries[lastIndex];
+  if (last.floor === target.floor && last.x === target.x && last.y === target.y) {
+    const combined = last.message ? `${last.message} ${message}` : message;
+    const updated = { ...last, message: combined.trim() };
+    return [...entries.slice(0, lastIndex), updated];
+  }
+  return [...entries];
+}
+
 export const useRunStore = create<RunState & RunActions>((set, get) => ({
   runId: null,
   runSeed: null,
@@ -114,6 +214,8 @@ export const useRunStore = create<RunState & RunActions>((set, get) => ({
   sceneId: null,
   pools: initialPools(),
   journal: [],
+  completedRooms: {},
+  activeCombat: null,
   dev: { gridOverlay: false },
 
   resumeFromStorage: () => {
@@ -121,8 +223,26 @@ export const useRunStore = create<RunState & RunActions>((set, get) => ({
     try {
       const raw = localStorage.getItem(STORAGE_KEY);
       if (!raw) return;
-      const parsed = JSON.parse(raw) as RunState;
-      set(() => ({ ...parsed }));
+      const parsed = JSON.parse(raw) as Partial<RunState>;
+      set(() => ({
+        runId: parsed.runId ?? null,
+        runSeed: parsed.runSeed ?? null,
+        currentFloor: parsed.currentFloor ?? 0,
+        floorSeeds: parsed.floorSeeds ?? {},
+        grid: parsed.grid ?? null,
+        playerPos: parsed.playerPos ?? null,
+        mode: parsed.mode === "combat" ? "explore" : parsed.mode ?? "explore",
+        sceneId: parsed.sceneId ?? null,
+        pools: parsed.pools ?? initialPools(),
+        journal: parsed.journal ?? [],
+        completedRooms: parsed.completedRooms ?? {},
+        activeCombat: null,
+        dev: parsed.dev ?? { gridOverlay: false },
+      }));
+      const combatState = useCombatStore.getState();
+      if (combatState.endEncounter) {
+        combatState.endEncounter();
+      }
     } catch {
       // ignore
     }
@@ -203,6 +323,8 @@ export const useRunStore = create<RunState & RunActions>((set, get) => ({
       journal: [
         { t: Date.now(), floor, x: playerPos.x, y: playerPos.y, type: "entry", scene: path },
       ],
+      completedRooms: {},
+      activeCombat: null,
       dev: { gridOverlay: false },
     };
     set(() => newState);
@@ -219,6 +341,7 @@ export const useRunStore = create<RunState & RunActions>((set, get) => ({
 
   move: (dir) => {
     const s = get();
+    if (s.mode === "combat") return;
     const grid = s.grid;
     const pos = s.playerPos;
     if (!grid || !pos) return;
@@ -238,13 +361,56 @@ export const useRunStore = create<RunState & RunActions>((set, get) => ({
     const target = grid.cells[idx(nx, ny, W)];
     if (target.type === "blocked") return;
 
-    // Update position and scene
     const { path, pools } = drawFromPool(s.pools, target.type);
-    const entry: JournalEntry = { t: Date.now(), floor: s.currentFloor, x: nx, y: ny, type: target.type, scene: path };
+    const entry: JournalEntry = {
+      t: Date.now(),
+      floor: s.currentFloor,
+      x: nx,
+      y: ny,
+      type: target.type,
+      scene: path,
+    };
+
+    const key = roomKey(s.currentFloor, nx, ny);
+    const alreadyCleared = !!s.completedRooms?.[key];
+
+    let mode: RunMode = "explore";
+    let activeCombat: RunState["activeCombat"] = null;
+
+    if (target.type === "combat" && !alreadyCleared) {
+      mode = "combat";
+      const enemies = selectEncounterEnemies(s.currentFloor);
+      const encounterSeed = `${s.runSeed ?? rand32()}:${key}:${s.journal.length}`;
+      const combatState = useCombatStore.getState();
+      if (combatState.endEncounter) {
+        combatState.endEncounter();
+      }
+      combatState.beginEncounter(
+        enemies,
+        buildPlayerEncounterState(s.journal.length),
+        encounterSeed
+      );
+      const encounter = useCombatStore.getState().encounter;
+      const initiativeLine = formatInitiativeJournal(encounter);
+      if (initiativeLine) {
+        entry.message = initiativeLine;
+      }
+      activeCombat = {
+        floor: s.currentFloor,
+        x: nx,
+        y: ny,
+        enemies,
+      };
+    } else if (target.type === "combat" && alreadyCleared) {
+      entry.message = "The area remains quiet.";
+    }
+
     const nextState: Partial<RunState> = {
       playerPos: { x: nx, y: ny },
       sceneId: path,
       pools,
+      mode,
+      activeCombat,
       journal: [...(s.journal ?? []), entry],
     };
     set((prev) => ({ ...prev, ...nextState }));
@@ -261,6 +427,54 @@ export const useRunStore = create<RunState & RunActions>((set, get) => ({
   },
 
   toggleGridOverlay: (on) => set((s) => ({ dev: { gridOverlay: on ?? !s.dev.gridOverlay } })),
+
+  completeCombat: ({ victory }) => {
+    const s = get();
+    const active = s.activeCombat;
+    if (!active) return;
+    const key = roomKey(active.floor, active.x, active.y);
+    const completedRooms = victory
+      ? { ...s.completedRooms, [key]: true }
+      : { ...s.completedRooms };
+
+    let updatedGrid = s.grid;
+    if (victory && updatedGrid) {
+      const cellIndex = idx(active.x, active.y, updatedGrid.width);
+      if (cellIndex >= 0 && cellIndex < updatedGrid.cells.length) {
+        const cells = [...updatedGrid.cells];
+        cells[cellIndex] = { ...cells[cellIndex], type: "empty" };
+        updatedGrid = { ...updatedGrid, cells };
+      }
+    }
+
+    const outcome = victory
+      ? "Victory! Room cleared."
+      : "Defeat... you were forced to retreat.";
+    const journal = appendOutcomeMessage(
+      s.journal ?? [],
+      { floor: active.floor, x: active.x, y: active.y },
+      outcome
+    );
+
+    const nextState: Partial<RunState> = {
+      grid: updatedGrid,
+      completedRooms,
+      mode: "explore",
+      activeCombat: null,
+      journal,
+    };
+
+    set((prev) => ({ ...prev, ...nextState }));
+
+    if (typeof window !== "undefined") {
+      try {
+        const snapshot = { ...get(), ...nextState } as RunState;
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(snapshot));
+      } catch {
+        // ignore
+      }
+    }
+  },
 
   _devSetRunFromSeed: async (floor: number, floorSeedNum: number) => {
     let floorConfig: FloorConfig | null = null;
@@ -296,6 +510,8 @@ export const useRunStore = create<RunState & RunActions>((set, get) => ({
       journal: [
         { t: Date.now(), floor, x: playerPos.x, y: playerPos.y, type: "entry", scene: path },
       ],
+      completedRooms: {},
+      activeCombat: null,
       dev: { gridOverlay: get().dev.gridOverlay },
     };
     set(() => newState);
@@ -353,6 +569,11 @@ export const useRunStore = create<RunState & RunActions>((set, get) => ({
     const path = "empty/empty_main.png";
     const pools = initialPools();
 
+    const combatState = useCombatStore.getState();
+    if (combatState.endEncounter) {
+      combatState.endEncounter();
+    }
+
     const newState: Partial<RunState> = {
       currentFloor: nextFloor,
       floorSeeds: { ...s.floorSeeds, [nextFloor]: floorSeed.seed >>> 0 },
@@ -362,6 +583,7 @@ export const useRunStore = create<RunState & RunActions>((set, get) => ({
       sceneId: path,
       pools,
       journal: [...(s.journal ?? []), { t: Date.now(), floor: nextFloor, x: playerPos.x, y: playerPos.y, type: "entry", scene: path }],
+      activeCombat: null,
     };
     set((prev) => ({ ...prev, ...newState }));
     if (typeof window !== "undefined") {
@@ -371,6 +593,10 @@ export const useRunStore = create<RunState & RunActions>((set, get) => ({
   },
 
   endRun: () => {
+    const combatState = useCombatStore.getState();
+    if (combatState.endEncounter) {
+      combatState.endEncounter();
+    }
     const cleared: RunState = {
       runId: null,
       runSeed: null,
@@ -382,9 +608,14 @@ export const useRunStore = create<RunState & RunActions>((set, get) => ({
       sceneId: null,
       pools: initialPools(),
       journal: [],
+      completedRooms: {},
+      activeCombat: null,
       dev: { gridOverlay: false },
     };
     set(() => cleared);
     if (typeof window !== "undefined") localStorage.setItem(STORAGE_KEY, JSON.stringify(cleared));
   },
 }));
+
+
+

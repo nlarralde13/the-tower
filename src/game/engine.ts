@@ -1,4 +1,5 @@
 import type { GameSnapshot, Dir } from "@/game/types";
+import type { RoomType as TowerRoomType } from "@/types/tower";
 import { genFloorWithRules } from "./towerGen";
 import { deadSpaceForFloor, getTowerById } from "./rulesets";
 import { flavorFor } from "./content/flavor";
@@ -37,7 +38,8 @@ export function tick(): void {}
 
 export function describeCurrentRoom(): string {
   const r = currentRoom();
-  const base = flavorFor(r.type);
+  const mappedType = (r.type === "void" ? "blocked" : r.type) as TowerRoomType;
+  const base = flavorFor(mappedType);
   const exits = listExits();
   const exitsText = exits.length
     ? "Exits: " + exits.map(e => e.label).join(", ") + "."
