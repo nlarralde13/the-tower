@@ -8,6 +8,32 @@
   border-top: 1px solid rgba(255, 255, 255, 0.08);
 }
 
+.overlay {
+   /* When embedded in the console's actions-pad, it must NOT be fixed */
+  position: static;
+  inset: auto;
+  z-index: auto;
+  padding: 0;
+  background: transparent;
+  border: 0;
+  backdrop-filter: none;
+}
+
+/* Optional: slightly tighter buttons in overlay mode */
+.overlay .button {
+  min-height: 46px;
+  border-radius: 14px;
+}
+
+/* Top utility row: Journal / Map / Inventory / Look */
+.utilityRow {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 8px;
+  margin-bottom: 8px;
+ }
+
+
 .inner {
   margin: 0 auto;
   max-width: 960px;

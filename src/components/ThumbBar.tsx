@@ -14,9 +14,16 @@ type ThumbBarProps = {
   onDefend?: () => void;
   onBack?: () => void;
   onAscend?: () => void;
+  onOpenJournal?: () => void;
+  onOpenMap?: () => void;
+  onOpenCharacter?: () => void;
+  onLookAround?: () => void;
   showAscend?: boolean;
   mode?: "explore" | "combat";
   disabled?: boolean;
+  variant?: "fixed" | "overlay";
+  className?: string;
+  utilityActions?: React.ReactNode;
 };
 
 export default function ThumbBar({
@@ -29,8 +36,16 @@ export default function ThumbBar({
   onBack,
   onAscend,
   showAscend,
+  onOpenJournal,
+  onOpenMap,
+  onOpenCharacter,
+  onLookAround,
   mode = "explore",
   disabled = false,
+  variant = "fixed",
+  className,
+  utilityActions,
+
 }: ThumbBarProps) {
   const handleMove = useCallback(
     (dir: Direction) => {
@@ -41,7 +56,29 @@ export default function ThumbBar({
   );
 
   return (
-    <div className={styles.container} role="group" aria-label="Movement and actions">
+    <div
+      className={[
+        styles.container,
+        variant === "overlay" ? styles.overlay : "",
+        className ?? ""
+      ].join(" ")}
+      role="group"
+      aria-label="Movement and actions"
+    >
+      {(utilityActions || onOpenJournal || onOpenMap || onOpenCharacter || onLookAround) && (
+        <div className={styles.utilityRow} role="group" aria-label="Utility actions">
+          {utilityActions ?? (
+            <>
+              <button className={styles.button} onClick={onOpenJournal} aria-label="Open journal">Journal</button>
+              <button className={styles.button} onClick={onOpenMap} aria-label="Open map">Map</button>
+              <button className={styles.button} onClick={onOpenCharacter} aria-label="Open character">Inventory</button>
+              <button className={styles.button} onClick={onLookAround} aria-label="Look around">Look Around</button>
+            </>
+          )}
+        </div>
+      )}
+
+
       <div className={styles.inner}>
         <div className={styles.cluster}>
           {showAscend && (
@@ -97,6 +134,7 @@ function ActionButton({
   onClick,
   onLongPress,
   disabled,
+
 }: {
   label: string;
   ariaLabel: string;

@@ -1,105 +1,153 @@
+:root {
+  /* Global layout knobs (tune these to your app) */
+  --topbar-height: 56px;               /* must match your TopBar */
+  --drawer-gap: 12px;                  /* visible space under TopBar */
+  --drawer-z: 120;                     /* above most UI */
+  --safe-bottom: env(safe-area-inset-bottom, 0px);
+
+  /* Width/height presets */
+  --drawer-width-left: 340px;
+  --drawer-width-right: 380px;
+  --sheet-height: 60vh;                /* default phone bottom-sheet height */
+
+  /* If you have a fixed mobile bottom bar, set this (else leave 0) */
+  --bottom-bar-height: 0px;
+}
+
+/* Root overlay spans viewport; interactive only when open */
 .root {
   position: fixed;
   inset: 0;
-  z-index: 65;
+  z-index: var(--drawer-z);
   pointer-events: none;
 }
+.open { pointer-events: auto; }
 
-.open {
-  pointer-events: auto;
-}
-
+/* Dimmed backdrop (keeps the TopBar area clear) */
 .backdrop {
   position: absolute;
-  inset: 0;
+  left: 0;
+  right: 0;
+  top: calc(var(--topbar-height) + var(--drawer-gap));
+  bottom: var(--safe-bottom);
   background: rgba(5, 2, 12, 0.45);
   opacity: 0;
   transition: opacity 220ms ease;
   pointer-events: auto;
 }
+.backdropHidden { pointer-events: none; }
 
-.backdropHidden {
-  pointer-events: none;
-}
-
+/* Base panel chrome (blurred glass card) */
 .panel {
   position: absolute;
   background: rgba(18, 14, 28, 0.82);
   backdrop-filter: blur(18px);
   border: 1px solid rgba(255, 255, 255, 0.08);
-  border-radius: 20px 20px 0 0;
+  border-radius: 20px;
   box-shadow:
     0 18px 48px rgba(5, 0, 20, 0.55),
     inset 0 0 0 1px rgba(255, 255, 255, 0.06);
   padding: 18px;
-  transform: translateY(110%);
-  transition: transform 260ms cubic-bezier(0.22, 0.8, 0.24, 1);
   color: #f5f2e6;
   pointer-events: auto;
-  max-height: calc(100dvh - 40px);
   display: flex;
   flex-direction: column;
   gap: 16px;
+
+  /* Content scrolls inside; panel itself stays within viewport */
+  overflow: auto;
+
+  /* Off-screen by default; variants override axis */
+  transform: translateY(110%);
+  transition: transform 260ms cubic-bezier(0.22, 0.8, 0.24, 1);
 }
 
+/* ---------- Side drawers (left / right) ---------- */
 .panelLeft,
 .panelRight {
-  top: 0;
-  bottom: 0;
-  width: min(88vw, 420px);
+  top: calc(var(--topbar-height) + var(--drawer-gap));
+  bottom: var(--safe-bottom);
+  height: auto;
+  max-height: calc(100dvh - var(--topbar-height) - var(--drawer-gap) - var(--safe-bottom));
+  width: min(88vw, var(--drawer-width-left)); /* left default; right overrides below */
   border-radius: 0 20px 20px 0;
   transform: translateX(-110%);
-  max-height: none;
 }
 
 .panelRight {
   left: auto;
   right: 0;
+  width: min(88vw, var(--drawer-width-right));
   border-radius: 20px 0 0 20px;
   transform: translateX(110%);
 }
 
+/* ---------- Bottom sheet (generic) ---------- */
 .panelBottom {
   left: 50%;
-  transform: translate(-50%, 110%);
+  bottom: var(--safe-bottom);
   width: min(96vw, 560px);
-  bottom: env(safe-area-inset-bottom, 0px);
+  height: var(--sheet-height);
+  max-height: min(
+    80vh,
+    calc(100dvh - var(--topbar-height) - var(--bottom-bar-height))
+  );
   border-radius: 24px 24px 0 0;
+  transform: translate(-50%, 110%);
 }
 
-.open .panelBottom,
+/* ---------- Open state ---------- */
 .open .panelLeft,
-.open .panelRight {
-  transform: translate(0, 0);
-}
+.open .panelRight { transform: translateX(0); }
+.open .panelBottom { transform: translate(-50%, 0); }
+.open .backdrop { opacity: 1; }
 
-.open .panelBottom {
-  transform: translate(-50%, 0);
-}
-
-.open .backdrop {
-  opacity: 1;
-}
-
-@media (min-width: 920px) {
-  .panelBottomJournal {
-    top: 0;
-    bottom: 0;
+/* ---------- Mobile behavior: side drawers become bottom sheets ---------- */
+@media (max-width: 919px) {
+  .panelRight,
+  .panelLeft {
+    left: 0;
     right: 0;
-    left: auto;
-    width: min(64vw, 420px);
-    border-radius: 20px 0 0 20px;
-    transform: translateX(110%);
+    bottom: var(--safe-bottom);
+    top: auto;
+    width: 100vw;
+    border-radius: 24px 24px 0 0;
+    transform: translateY(110%);
+    /* Respect TopBar + any fixed bottom bar */
+    max-height: calc(100dvh - var(--topbar-height) - var(--bottom-bar-height) - var(--safe-bottom));
+    height: min(76vh, calc(100dvh - var(--topbar-height) - var(--bottom-bar-height) - var(--safe-bottom)));
+    overflow: auto;
   }
-
-  .open .panelBottomJournal {
-    transform: translateX(0);
-  }
+  .open .panelRight,
+  .open .panelLeft { transform: translateY(0); }
 }
 
+/* ---------- Reduced motion ---------- */
 @media (prefers-reduced-motion: reduce) {
-  .backdrop,
-  .panel {
-    transition-duration: 0.001ms;
-  }
+  .backdrop, .panel { transition-duration: 1ms; }
+}
+
+/* ---------- Per-drawer overrides via IDs (optional) ---------- */
+#character-drawer { --drawer-width-left: 340px; }
+#map-drawer { --drawer-width-right: 360px; }
+#journal-drawer-desktop { --drawer-width-right: 300px; }
+#journal-drawer-mobile { --sheet-height: 58vh; }
+
+/* ---------- De-chrome inner panels when embedded in a drawer ---------- */
+/* Journal often uses a .menu-panel wrapper (from globals) */
+.panel > .menu-panel {
+  background: transparent !important;
+  border: 0 !important;
+  box-shadow: none !important;
+  backdrop-filter: none !important;
+  padding: 0 !important;
+}
+
+/* If your Map wrapper uses its own styled container, give it this data-attr in JSX */
+.panel [data-embedded-panel="true"] {
+  background: transparent !important;
+  border: 0 !important;
+  box-shadow: none !important;
+  backdrop-filter: none !important;
+  padding: 0 !important;
 }

@@ -8,6 +8,32 @@
   --topbar-glass: rgba(14, 12, 22, 0.38);
 }
 
+.overlay {
+   /* When the bar is embedded inside the actions-pad, it must NOT be fixed */
+   position: static;
+   inset: auto;
+   z-index: auto;
+   padding: 0;                 /* the pad provides its own padding */
+   backdrop-filter: none;      /* visuals come from the pad */
+   background: transparent;
+   border: 0;
+ }
+ 
+ /* Optional compact tweak so overlay buttons feel tighter in the console */
+ .overlay .button {
+   min-height: 46px;
+   border-radius: 14px;
+ }
+ 
+ /* Utility row for Journal / Map / Inventory / Look */
+ .utilityRow {
+   display: grid;
+   grid-template-columns: repeat(4, 1fr);
+   gap: 8px;
+   margin-bottom: 8px;
+ }
+
+
 .bar {
   position: fixed;
   inset: 0 0 auto;
@@ -206,4 +232,28 @@
 .menuLink:focus-visible {
   outline: 2px solid rgba(225, 205, 160, 0.75);
   outline-offset: 2px;
+}
+/* When the bar lives inside the console overlay */
+/* Overlay mode: when ThumbBar lives inside the console overlay */
+.overlay {
+  position: static;        /* not fixed to viewport */
+  inset: auto;
+  background: transparent; /* page-level frame provides visuals */
+  border: 0;
+  padding: 0;
+  backdrop-filter: none;
+}
+
+/* Optional compact tweak for overlay buttons */
+.overlay .button {
+  min-height: 46px;
+  border-radius: 14px;
+}
+
+/* Optional utility row (Journal / Map / Inventory / Look) */
+.utilityRow {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 8px;
+  margin-bottom: 8px;
 }

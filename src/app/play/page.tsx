@@ -1,5 +1,19 @@
 ﻿"use client";
 
+/**
+ * ============================================================
+ *  /src/app/play/page.tsx
+ *  "Play" screen — main gameplay surface (scene, controls, rails)
+ *  - Left rail: Inventory + Character
+ *  - Middle: Scene viewer with overlayed action pad + Combat overlay
+ *  - Right rail: Map + Journal access (drawer on mobile)
+ *  - Responsive: drawers for Character/Map/Journal on small screens
+ * ============================================================
+ */
+
+import "./play.desktop.css";
+import "./play.mobile.css";
+
 import { useEffect, useMemo, useRef, useState } from "react";
 import PageSurface from "@/components/PageSurface";
 import SceneViewer from "@/components/SceneViewer";
@@ -16,9 +30,23 @@ import { getEnemyDefinition } from "@/content/index";
 import { useRouter, useSearchParams } from "next/navigation";
 import { playMusic } from "@/utils/audioManager";
 
+/* =================================================================
+   PAGE COMPONENT
+   -----------------------------------------------------------------
+   Orchestrates run state, room captions, combat state, and renders
+   the three-pane layout with drawers on mobile.
+   ================================================================= */
+
 export default function PlayPage() {
+  /* --------------------------------------------------------------
+   * Routing + query params
+   * -------------------------------------------------------------- */
   const router = useRouter();
   const search = useSearchParams();
+
+  /* --------------------------------------------------------------
+   * RUN STORE — game/session state
+   * -------------------------------------------------------------- */
   const resume = useRunStore((s) => s.resumeFromStorage);
   const runId = useRunStore((s) => s.runId);
   const grid = useRunStore((s) => s.grid);
@@ -32,11 +60,13 @@ export default function PlayPage() {
   const showOverlay = useRunStore((s) => s.dev.gridOverlay);
   const currentFloor = useRunStore((s) => s.currentFloor ?? 0);
   const completedRooms = useRunStore((s) => s.completedRooms);
-  const mode = useRunStore((s) => s.mode);
+  const mode = useRunStore((s) => s.mode); // "explore" | "combat"
   const activeCombat = useRunStore((s) => s.activeCombat);
   const defeatOverlay = useRunStore((s) => s.defeatOverlay);
 
-  const [actionMsg, setActionMsg] = useState<string>("");
+  /* --------------------------------------------------------------
+   * UI STORE — drawers & panels
+   * -------------------------------------------------------------- */
   const characterOpen = useUIStore((state) => state.openPanels.character);
   const mapOpen = useUIStore((state) => state.openPanels.map);
   const journalOpen = useUIStore((state) => state.openPanels.journal);
@@ -46,37 +76,54 @@ export default function PlayPage() {
   const openPanel = useUIStore((state) => state.open);
   const handleToggleDrawer = (panel: PanelName) => () => togglePanel(panel);
   const handleCloseDrawer = (panel: PanelName) => () => closePanel(panel);
+
+  /* --------------------------------------------------------------
+   * System feedback (haptics + aria-live messages)
+   * -------------------------------------------------------------- */
   const { trigger: triggerHaptic } = useHaptics();
+  const [actionMsg, setActionMsg] = useState<string>("");
   const liveRef = useRef<HTMLDivElement | null>(null);
 
-  //AUDIO
-  playMusic("/audio/tower_theme.mp3")
+  /* --------------------------------------------------------------
+   * Ambient audio (looped music)
+   * -------------------------------------------------------------- */
+  playMusic("/audio/tower_theme.mp3");
 
-
+  /* --------------------------------------------------------------
+   * Lifecycle: resume from storage, apply dev overlay, guard route
+   * -------------------------------------------------------------- */
   useEffect(() => {
     resume();
   }, [resume]);
 
-  // Dev overlay via query ?overlay=1
+  // Allow dev overlay via ?overlay=1
   useEffect(() => {
     if (search?.get("overlay") === "1") toggleOverlay(true);
   }, [search, toggleOverlay]);
 
+  // If no active run, redirect to /climb
   useEffect(() => {
-    if (!runId) {
-      // No run; bounce to climb
-      router.replace("/climb");
-    }
+    if (!runId) router.replace("/climb");
   }, [runId, router]);
 
-  const currentType = useMemo(() => (pos && grid ? roomTypeAt(pos.x, pos.y) : null), [pos, grid, roomTypeAt]);
+  /* --------------------------------------------------------------
+   * Derived room state: current type, caption / viewer text
+   * -------------------------------------------------------------- */
+  const currentType = useMemo(
+    () => (pos && grid ? roomTypeAt(pos.x, pos.y) : null),
+    [pos, grid, roomTypeAt]
+  );
+
   const currentKey = pos ? `${currentFloor}:${pos.x},${pos.y}` : null;
+
   const caption = useMemo(() => {
+    // Exploration caption: flavor + exits based on passable tiles
     if (!currentType || !grid || !pos) return undefined;
     const dirs: string[] = [];
-    const passable = new Set(["entry","exit","boss","combat","trap","loot","out","special","empty"]);
+    const passable = new Set(["entry", "exit", "boss", "combat", "trap", "loot", "out", "special", "empty"]);
     const W = grid.width, H = grid.height;
-    const can = (x: number, y: number) => x >= 0 && y >= 0 && x < W && y < H && passable.has(grid.cells[y * W + x].type);
+    const can = (x: number, y: number) =>
+      x >= 0 && y >= 0 && x < W && y < H && passable.has(grid.cells[y * W + x].type);
     if (can(pos.x, pos.y - 1)) dirs.push("north");
     if (can(pos.x, pos.y + 1)) dirs.push("south");
     if (can(pos.x - 1, pos.y)) dirs.push("west");
@@ -84,8 +131,10 @@ export default function PlayPage() {
     return `${chooseFlavor(currentType)} ${exitsFlavor(dirs)}`.trim();
   }, [currentType, grid, pos]);
 
-  const clearedRoomMessage = "The enemy was defeated and the room is now clear to move on.";
+  const clearedRoomMessage =
+    "The enemy was defeated and the room is now clear to move on.";
 
+  // One-line combat caption based on current enemies
   const combatCaption = useMemo(() => {
     if (!activeCombat) return undefined;
     const names = activeCombat.enemies
@@ -94,21 +143,23 @@ export default function PlayPage() {
     return names ? `You engage ${names}.` : "Combat engaged.";
   }, [activeCombat]);
 
+  // Viewer caption priority:
+  //   combat > cleared-room line > exploration flavor
   const viewerCaption = useMemo(() => {
-    if (mode === "combat") {
-      return combatCaption ?? caption;
-    }
-    if (
-      currentKey &&
-      completedRooms?.[currentKey]
-    ) {
+    if (mode === "combat") return combatCaption ?? caption;
+    if (currentKey && completedRooms?.[currentKey]) {
       const base = caption ?? "";
       return `${base} ${clearedRoomMessage}`.trim();
     }
     return caption;
   }, [mode, combatCaption, caption, currentKey, completedRooms]);
 
+  /* --------------------------------------------------------------
+   * Mode & meters
+   * -------------------------------------------------------------- */
   const combatActive = mode === "combat";
+
+  // Temporary HUD meters — wire to real player stats later
   const heroMeters = useMemo<GaugeValue[]>(
     () => [
       { label: "HP", icon: "❤", current: 32, max: 40, color: "#ec6d6d" },
@@ -118,17 +169,18 @@ export default function PlayPage() {
     []
   );
 
+  // Open/close combat action sheet based on mode
   useEffect(() => {
-    if (mode === "combat") {
-      openPanel("combatActions");
-    } else {
-      closePanel("combatActions");
-    }
+    if (mode === "combat") openPanel("combatActions");
+    else closePanel("combatActions");
   }, [mode, openPanel, closePanel]);
 
+  /* --------------------------------------------------------------
+   * Helpers — announce (aria-live), inspect, end run, back
+   * -------------------------------------------------------------- */
   function announce(msg: string) {
     setActionMsg(msg);
-    // trigger SR re-read
+    // Force SR re-read by briefly clearing then setting text content
     requestAnimationFrame(() => {
       if (liveRef.current) {
         (liveRef.current as HTMLDivElement).textContent = "";
@@ -138,9 +190,7 @@ export default function PlayPage() {
   }
 
   useEffect(() => {
-    if (defeatOverlay) {
-      announce("You have been defeated. A piece of your soul lingers.");
-    }
+    if (defeatOverlay) announce("You have been defeated. A piece of your soul lingers.");
   }, [defeatOverlay]);
 
   const handleInspect = () => {
@@ -161,6 +211,7 @@ export default function PlayPage() {
     router.push("/");
   };
 
+  // Haptics + announcer when mode flips
   const prevModeRef = useRef(mode);
   useEffect(() => {
     const previous = prevModeRef.current;
@@ -176,37 +227,61 @@ export default function PlayPage() {
   }, [mode, triggerHaptic]);
 
   function handleBack() {
-    if (confirm("Leave the current run and return to the climb?") === true) {
+    if (confirm("Leave the current run and return to the climb?")) {
       router.push("/climb");
     }
   }
 
+  /* --------------------------------------------------------------
+   * Floor gating (ascend/extract)
+   * -------------------------------------------------------------- */
   const floorNow = useRunStore.getState().currentFloor ?? 0;
   const showAscend = currentType === "exit" && floorNow < 5;
   const atFinalExit = currentType === "exit" && floorNow === 5;
 
+  /* ===============================================================
+   * RENDER
+   * =============================================================== */
   return (
-    <PageSurface backgroundImage="/backgrounds/tower-bg.png">
-      <div className="play-grid">
-        <div aria-live="polite" aria-atomic ref={liveRef} style={{ position: "absolute", width: 1, height: 1, overflow: "hidden", clip: "rect(0 0 0 0)" }}>
+    <PageSurface >
+      {/* ============================================================
+          MAIN GRID — left rail / middle console / right rail
+          ============================================================ */}
+      <div className="play-root">
+        {/* Screen-reader live region for short announcements */}
+        <div
+          aria-live="polite"
+          aria-atomic
+          ref={liveRef}
+          style={{
+            position: "absolute",
+            width: 1,
+            height: 1,
+            overflow: "hidden",
+            clip: "rect(0 0 0 0)",
+          }}
+        >
           {actionMsg}
         </div>
 
+        {/* Defeat overlay (modal) */}
         {defeatOverlay ? <DefeatOverlay onEndRun={handleEndRun} /> : null}
 
-        {/* Left column (desktop): Inventory + Character */}
+        {/* ============================================================
+            LEFT RAIL — Inventory + Character
+            ============================================================ */}
         <aside className="play-left">
-          <InventoryPanel />
-          <CharacterPanel meters={heroMeters} />
         </aside>
 
-        {/* Middle: scene + controls in a console frame */}
+        {/* ============================================================
+            MIDDLE — Scene viewer + overlayed action pad + combat layer
+            ============================================================ */}
         <section className="play-middle">
+          {/* The "console-frame" visually frames the scene area */}
           <div className={`console-frame ${combatActive ? "console-frame--combat" : ""}`}>
-            <div
-              className="console-frame__content"
-              aria-hidden={combatActive}
-            >
+            {/* console-frame__content must be position:relative so the actions pad can overlay */}
+            <div className="console-frame__content" aria-hidden={combatActive}>
+              {/* SCENE SURFACE — the artwork / background stays visible under overlays */}
               <div className={`scene-surface ${combatActive ? "scene-surface--locked" : ""}`}>
                 <SceneViewer
                   className={`scene-viewer${combatActive ? " scene-viewer--dimmed" : ""}`}
@@ -220,13 +295,17 @@ export default function PlayPage() {
                   floor={useRunStore.getState().currentFloor}
                 />
               </div>
-              {!combatActive ? (
+                            {/* ACTIONS PAD — overlayed controls inside the console */}
+              <div className="actions-pad">
                 <ThumbBar
+                  variant="overlay"
+                  onOpenJournal={() => openPanel("journal")}
+                  onOpenMap={() => openPanel("map")}
+                  onOpenCharacter={() => openPanel("character")}
+                  onLookAround={handleInspect}
+
                   onMove={(d) => {
-                    if (defeatOverlay) {
-                      announce("You cannot move while your soul lingers here.");
-                      return;
-                    }
+                    if (defeatOverlay) { announce("You cannot move while your soul lingers here."); return; }
                     if (!grid || !pos) return;
                     const passable = new Set(["entry","exit","boss","combat","trap","loot","out","special","empty"]);
                     const W = grid.width, H = grid.height;
@@ -235,15 +314,9 @@ export default function PlayPage() {
                     if (d === "south") ny += 1;
                     if (d === "west") nx -= 1;
                     if (d === "east") nx += 1;
-                    if (nx < 0 || ny < 0 || nx >= W || ny >= H) {
-                      announce("Why are you running face first into that wall?");
-                      return;
-                    }
+                    if (nx < 0 || ny < 0 || nx >= W || ny >= H) { announce("Why are you running face first into that wall?"); return; }
                     const t = grid.cells[ny * W + nx];
-                    if (!t || !passable.has(t.type)) {
-                      announce("Why are you running face first into that wall?");
-                      return;
-                    }
+                    if (!t || !passable.has(t.type)) { announce("Why are you running face first into that wall?"); return; }
                     move(d);
                   }}
                   onInteract={handleInspect}
@@ -252,29 +325,31 @@ export default function PlayPage() {
                   onItem={() => announce("Item (stub)")}
                   onDefend={() => announce("Defend (stub)")}
                   onBack={handleBack}
-                  onAscend={async () => {
-                    await ascend?.();
-                    window.scrollTo({ top: 0, behavior: "instant" as ScrollBehavior });
-                  }}
+                  onAscend={async () => { await ascend?.(); window.scrollTo({ top: 0, behavior: "instant" as ScrollBehavior }); }}
                   showAscend={showAscend}
                   mode={mode}
                   disabled={defeatOverlay}
                 />
-              ) : null}
-            </div>
-            <CombatOverlay active={combatActive} />
-          </div>
+              </div>
+              </div> {/* closes .console-frame__content */}
+              </div>   {/* closes .console-frame */}
 
-          {/* Mobile: floating toggles for drawers */}
+
+
+
+
+
+            {/* COMBAT OVERLAY — sits above the scene when combat is active */}
+            <CombatOverlay active={combatActive} />
+        
+
+          {/* ------------------------------------------------------------
+             MOBILE TOGGLES — small floating buttons to open drawers
+             ------------------------------------------------------------ */}
           <div className="hide-desktop" style={{ position: "relative" }}>
             <div className="mobile-side-buttons">
-              <button
-                className="btn btn--ghost"
-                onClick={handleToggleDrawer("character")}
-                aria-label="Open character drawer"
-              >
-                Character
-              </button>
+              <button data-drawer-toggle="character-drawer">Character</button>
+
               <button
                 className="btn btn--ghost"
                 onClick={handleToggleDrawer("map")}
@@ -293,28 +368,13 @@ export default function PlayPage() {
           </div>
         </section>
 
-        {/* Right column (desktop): Map + Journal */}
-        <div className="play-right" style={{ display: "grid", gap: 12 }}>
-          {!atFinalExit && (
-            <div className="show-desktop">
-              <MapPanel />
-            </div>
-          )}
-          {atFinalExit && (
-            <FinalExtract onExtract={() => { endRun?.(); router.push("/climb"); }} />
-          )}
-          <div className="show-desktop" style={{ display: "flex", justifyContent: "flex-end" }}>
-            <button
-              className="btn btn--ghost"
-              onClick={handleToggleDrawer("journal")}
-              aria-label="Open journal drawer"
-            >
-              Open Journal
-            </button>
-          </div>
-        </div>
-
-        {/* Mobile & responsive drawers */}
+        {/* ============================================================
+            RIGHT RAIL — Map + Journal (button opens drawer)
+            ============================================================ */}
+        
+        {/* ============================================================
+            DRAWERS — responsive panels for mobile/smaller screens
+            ============================================================ */}
         <SlideDrawer
           id="character-drawer"
           side="left"
@@ -336,6 +396,7 @@ export default function PlayPage() {
           <MapPanel onClose={handleCloseDrawer("map")} titleId="map-drawer-title" />
         </SlideDrawer>
 
+        {/* Journal: bottom sheet on mobile, right drawer on desktop */}
         <div className="hide-desktop">
           <SlideDrawer
             id="journal-drawer-mobile"
@@ -360,6 +421,7 @@ export default function PlayPage() {
           </SlideDrawer>
         </div>
 
+        {/* Combat actions bottom sheet (auto-opens in combat) */}
         <SlideDrawer
           id="combat-sheet"
           side="bottom"
@@ -374,6 +436,9 @@ export default function PlayPage() {
   );
 }
 
+/* =================================================================
+   UTILS
+   ================================================================= */
 
 function formatDropSource(source?: string | null): string | null {
   if (!source) return null;
@@ -388,7 +453,15 @@ function formatDropSource(source?: string | null): string | null {
   return `Logged source: ${source}`;
 }
 
+function toTitle(str: string) {
+  return str.replace(/[-_]/g, " ").replace(/\b\w/g, (m) => m.toUpperCase());
+}
 
+/* =================================================================
+   OVERLAYS & PANELS (local components)
+   ================================================================= */
+
+/** Defeat modal shown when the run is lost. */
 function DefeatOverlay({ onEndRun }: { onEndRun: () => void }) {
   return (
     <div
@@ -447,6 +520,7 @@ function DefeatOverlay({ onEndRun }: { onEndRun: () => void }) {
   );
 }
 
+/** Inventory summary (placeholder content; wire to real items later). */
 function InventoryPanel() {
   return (
     <div className="menu-panel" aria-label="Inventory" style={{ minHeight: 260 }}>
@@ -485,6 +559,7 @@ function InventoryPanel() {
   );
 }
 
+/** Character summary with compact meters and a few stats. */
 function CharacterPanel({ meters, titleId }: { meters: GaugeValue[]; titleId?: string }) {
   return (
     <div className="menu-panel" aria-label="Character Sheet">
@@ -517,6 +592,7 @@ function PanelRow({ label, value }: { label: string; value: string }) {
   );
 }
 
+/** Bottom sheet used during combat for choosing actions. */
 function CombatActionSheet() {
   const encounter = useCombatStore((state) => state.encounter);
   const commitDecision = useCombatStore((state) => state.commitPlayerDecision);
@@ -536,7 +612,6 @@ function CombatActionSheet() {
   const enemies = entities.filter((entity) => entity.faction === "enemy" && entity.alive);
   const targetId = enemies[0]?.id;
   const canAct = !!player && !!targetId && activeSide === "player";
-
   const actions = player?.actions ?? [];
 
   return (
@@ -572,6 +647,7 @@ function CombatActionSheet() {
   );
 }
 
+/** Final extraction panel shown when reaching the final exit. */
 function FinalExtract({ onExtract }: { onExtract: () => void }) {
   return (
     <div
@@ -602,10 +678,12 @@ function FinalExtract({ onExtract }: { onExtract: () => void }) {
   );
 }
 
+/** Journal panel with two tabs: Run Log and Combat Log. */
 function JournalPanel({ titleId }: { titleId?: string }) {
   const runLog = useRunStore((s) => s.runLog);
   const combatLog = useRunStore((s) => s.combatLog);
   const combatBuffer = useRunStore((s) => s.combatLogBuffer);
+
   const [activeTab, setActiveTab] = useState<"run" | "combat">("run");
   const [runFilter, setRunFilter] = useState<"all" | "combat" | "loot" | "movement">("all");
   const [expandedRun, setExpandedRun] = useState<string | null>(null);
@@ -645,6 +723,8 @@ function JournalPanel({ titleId }: { titleId?: string }) {
       <div className="panel-title" id={titleId}>
         Journal
       </div>
+
+      {/* Tabs */}
       <div style={{ display: "flex", gap: 8, marginBottom: 12 }}>
         <button
           type="button"
@@ -672,6 +752,7 @@ function JournalPanel({ titleId }: { titleId?: string }) {
         </button>
       </div>
 
+      {/* Run log filter chips */}
       {activeTab === "run" && (
         <div style={{ display: "flex", gap: 6, marginBottom: 10, flexWrap: "wrap" }}>
           {filterOptions.map((opt) => (
@@ -683,8 +764,12 @@ function JournalPanel({ titleId }: { titleId?: string }) {
               style={{
                 flex: "1 1 auto",
                 minWidth: 80,
-                border: runFilter === opt.id ? "1px solid rgba(255,255,255,0.35)" : "1px solid rgba(255,255,255,0.12)",
-                background: runFilter === opt.id ? "rgba(255,255,255,0.1)" : "rgba(255,255,255,0.04)",
+                border:
+                  runFilter === opt.id
+                    ? "1px solid rgba(255,255,255,0.35)"
+                    : "1px solid rgba(255,255,255,0.12)",
+                background:
+                  runFilter === opt.id ? "rgba(255,255,255,0.1)" : "rgba(255,255,255,0.04)",
               }}
             >
               {opt.label}
@@ -693,8 +778,10 @@ function JournalPanel({ titleId }: { titleId?: string }) {
         </div>
       )}
 
+      {/* Scroll area */}
       <div style={{ maxHeight: 320, overflowY: "auto", paddingRight: 4 }}>
         {activeTab === "run" ? (
+          /* Run entries */
           filteredRunLog.length === 0 ? (
             <p style={{ color: "var(--color-muted)", margin: 0 }}>No run events recorded yet.</p>
           ) : (
@@ -737,24 +824,20 @@ function JournalPanel({ titleId }: { titleId?: string }) {
                       >
                         {entry.message}
                       </span>
-                      {meta && (
-                        <span style={{ fontSize: 12, opacity: 0.7 }}>{meta}</span>
-                      )}
+                      {meta && <span style={{ fontSize: 12, opacity: 0.7 }}>{meta}</span>}
                     </button>
                   </li>
                 );
               })}
             </ul>
           )
-        ) : combinedCombatLog.length === 0 ? (
+        ) : /* Combat entries */ combinedCombatLog.length === 0 ? (
           <p style={{ color: "var(--color-muted)", margin: 0 }}>No combat events recorded yet.</p>
         ) : (
           <ul style={{ listStyle: "none", margin: 0, padding: 0, display: "grid", gap: 8 }}>
             {combinedCombatLog.map((entry) => {
               const expanded = expandedCombat === entry.id;
-              const tagLabel = entry.tag
-                ? entry.tag.charAt(0).toUpperCase() + entry.tag.slice(1)
-                : undefined;
+              const tagLabel = entry.tag ? entry.tag.charAt(0).toUpperCase() + entry.tag.slice(1) : undefined;
               const meta = renderMeta(entry.floor, entry.location, tagLabel);
               return (
                 <li key={entry.id}>
@@ -787,9 +870,7 @@ function JournalPanel({ titleId }: { titleId?: string }) {
                     >
                       {entry.message}
                     </span>
-                    {meta && (
-                      <span style={{ fontSize: 12, opacity: 0.7 }}>{meta}</span>
-                    )}
+                    {meta && <span style={{ fontSize: 12, opacity: 0.7 }}>{meta}</span>}
                   </button>
                 </li>
               );
@@ -801,21 +882,23 @@ function JournalPanel({ titleId }: { titleId?: string }) {
   );
 }
 
+/** Floor mini-map panel (8×8 by default). */
 function MapPanel({ onClose, titleId }: { onClose?: () => void; titleId?: string }) {
   const grid = useRunStore((s) => s.grid);
   const visitedRooms = useRunStore((s) => s.visitedRooms);
   const pos = useRunStore((s) => s.playerPos);
   const currentFloor = useRunStore((s) => s.currentFloor);
+
+  // Build a quick set of visited coords for the current floor
   const visited = new Set<string>();
   if (visitedRooms) {
     for (const key of Object.keys(visitedRooms)) {
       if (!visitedRooms[key]) continue;
       const [floorPart, coords] = key.split(":");
-      if (Number(floorPart) === currentFloor && coords) {
-        visited.add(coords);
-      }
+      if (Number(floorPart) === currentFloor && coords) visited.add(coords);
     }
   }
+
   const W = grid?.width ?? 8;
   const H = grid?.height ?? 8;
   const total = W * H;
@@ -833,7 +916,15 @@ function MapPanel({ onClose, titleId }: { onClose?: () => void; titleId?: string
         padding: 16,
       }}
     >
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
+      {/* Header with optional close button for drawer mode */}
+      <div
+        style={{
+          display: "flex",
+          justifyContent: "space-between",
+          alignItems: "center",
+          marginBottom: 8,
+        }}
+      >
         <strong id={titleId}>Map</strong>
         {onClose && (
           <button
@@ -851,6 +942,8 @@ function MapPanel({ onClose, titleId }: { onClose?: () => void; titleId?: string
           </button>
         )}
       </div>
+
+      {/* Grid of tiles */}
       <div
         style={{
           display: "grid",
@@ -904,6 +997,7 @@ function MapPanel({ onClose, titleId }: { onClose?: () => void; titleId?: string
           );
         })}
       </div>
+
       <div style={{ marginTop: 8, opacity: 0.85, fontSize: 12 }}>
         White = rooms you have entered. Dark = unknown.
       </div>

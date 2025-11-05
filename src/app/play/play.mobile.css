@@ -1,0 +1,106 @@
+/* ==========================================================================
+   /play — Mobile layout (max-width: 1023px)
+   Handheld style: screen (top) + controller (bottom), no overlap
+   ========================================================================== */
+
+@media (max-width: 1023px) {
+  .play-root {
+    min-height: 100dvh;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+
+    /* leave room for TopBar + (optional) global bottom bar */
+    padding: calc(var(--topbar-height) + 12px) 12px
+             calc(16px + var(--safe-bottom));
+  }
+
+  /* Rails are drawer-driven on mobile */
+  .play-left,
+  .play-right { display: none !important; }
+
+  /* Handheld console shell */
+  .console-frame {
+    position: relative;
+    border-radius: var(--r-md);
+    background: linear-gradient(180deg, rgba(18,14,28,0.60), rgba(10,8,16,0.50));
+    border: 1px solid rgba(255,255,255,0.10);
+    box-shadow: 0 24px 60px rgba(0,0,0,0.45), inset 0 0 0 1px rgba(255,255,255,0.04);
+    overflow: hidden;
+  }
+
+  /* Stack: screen on top, controller below */
+  .console-frame__content {
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    padding: 12px;
+    min-height: 0; /* avoid weird growth */
+  }
+
+  /* "Screen" area: fixed aspect like GB/NDS (4:3) */
+  .scene-surface {
+    width: 100%;
+    aspect-ratio: 4 / 3;    /* <- key to handheld feel */
+    border-radius: var(--r-sm);
+    overflow: hidden;
+    background: #000;       /* black bezel behind the viewer */
+  }
+
+  /* If you dim/lock in combat, keep the box height */
+  .scene-surface--locked { pointer-events: none; }
+
+  /* Controller pad: sits UNDER the screen, not overlayed */
+  .actions-pad {
+    position: static;          /* was absolute */
+    margin-top: 4px;
+    padding: 12px;
+    border-radius: var(--r-sm);
+    background: linear-gradient(180deg, rgba(22,18,30,0.08), rgba(12,10,16,0.6));
+    border: 1px solid rgba(255,255,255,0.10);
+    box-shadow: 0 14px 40px rgba(0,0,0,0.40);
+    z-index: 1;                /* just in case */
+  }
+
+  /* D-pad style grid; your ThumbBar already uses these hooks */
+  .actions-grid {
+    display: grid;
+    grid-template-columns: 1.1fr 1fr 1.1fr;  /* d-pad | center | buttons */
+    grid-auto-rows: 46px;
+    gap: 10px;
+    align-items: center;
+  }
+
+  /* Classic D-pad cross on the left */
+  .actions-grid--dpad {
+    display: grid;
+    grid-template-columns: 1fr 84px 1fr;
+    grid-template-rows: 46px 46px 46px;
+    gap: 8px;
+    justify-items: center;
+  }
+  .actions-grid--dpad .north { grid-column: 2; grid-row: 1; }
+  .actions-grid--dpad .west  { grid-column: 1; grid-row: 2; justify-self: end; }
+  .actions-grid--dpad .east  { grid-column: 3; grid-row: 2; justify-self: start; }
+  .actions-grid--dpad .south { grid-column: 2; grid-row: 3; }
+
+  /* Buttons feel chunky on touch */
+  .actions-pad .btn {
+    min-height: 46px;
+    font-weight: 700;
+    border-radius: 14px;
+  }
+
+  /* Optional: small “handheld seam” between screen & controls */
+  .console-frame__content::before {
+    content: "";
+    height: 2px;
+    border-radius: 2px;
+    background: linear-gradient(90deg,
+      rgba(197,139,58,0.28), rgba(255,255,255,0.12), rgba(197,139,58,0.28));
+    opacity: 0.35;
+    order: 0;
+    margin: -2px 4px 0 4px;
+  }
+}
