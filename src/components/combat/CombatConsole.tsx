@@ -1,325 +1,237 @@
 ﻿"use client";
-
 import { useEffect, useMemo, useRef, useState } from "react";
-import { useCombatStore } from "@/state/combatStore";
-import { useRunStore } from "@/store/runStore";
-import type { CombatLogTag } from "@/store/runStore";
-import type { CombatEntity, Encounter, Resolution } from "@/engine/combat/types";
-import { getActionDefinition } from "@/content/index";
-import { useHaptics } from "@/hooks/useHaptics";
 
-function getEntity(encounter: Encounter | null, id: string) {
-  if (!encounter) return null;
-  return encounter.entities[id] ?? null;
-}
+type Entity = {
+  id: string;
+  name: string;
+  hp: number; hpMax: number;
+  mp?: number; mpMax?: number;
+  st?: number; stMax?: number;
+  status?: string[];
+  isPlayer?: boolean;
+  position?: { x?: number; y?: number }; // for floaters rough placement
+};
 
-function describeResolution(resolution: Resolution, encounter: Encounter | null): string[] {
-  const lines: string[] = [];
-  const actor = getEntity(encounter, resolution.actorId);
-  const actorName = actor?.name ?? resolution.actorId;
-  const actionName =
-    getActionDefinition(resolution.actionId)?.name ?? resolution.actionId;
-  const opener = resolution.booster
-    ? `${actorName} used ${actionName} (${resolution.booster.outcome.toUpperCase()}).`
-    : `${actorName} used ${actionName}.`;
-  lines.push(opener);
+type EncounterVM = {
+  turnOwnerId: string;
+  order: string[];        // initiative order, ids
+  entities: Record<string, Entity>;
+  enemies: string[];
+  party: string[];
+};
 
-  for (const event of resolution.events) {
-    if (event.type === "damage") {
-      const target = getEntity(encounter, event.targetId);
-      const targetName = target?.name ?? event.targetId;
-      const crit = event.crit ? " Critical hit!" : "";
-      const blocked = event.blocked ? " (Guarded)" : "";
-      lines.push(`${targetName} took ${event.amount} damage.${crit}${blocked}`);
-    } else if (event.type === "status-apply") {
-      const target = getEntity(encounter, event.targetId);
-      const targetName = target?.name ?? event.targetId;
-      lines.push(
-        `${targetName} is affected by ${event.statusId} (${event.stacks} stack${
-          event.stacks !== 1 ? "s" : ""
-        }).`
-      );
-    } else if (event.type === "guard") {
-      const target = getEntity(encounter, event.targetId);
-      const targetName = target?.name ?? event.targetId;
-      lines.push(
-        `${targetName} gains ${Math.round(event.ratio * 100)}% guard for ${event.duration} turn${
-          event.duration !== 1 ? "s" : ""
-        }.`
-      );
-    } else if (event.type === "counter") {
-      const target = getEntity(encounter, event.targetId);
-      const targetName = target?.name ?? event.targetId;
-      lines.push(
-        `${targetName} prepares to counter ${Math.round(event.chance * 100)}% (${event.duration} turn${
-          event.duration !== 1 ? "s" : ""
-        }).`
-      );
-    } else if (event.type === "status-expire") {
-      const target = getEntity(encounter, event.targetId);
-      const targetName = target?.name ?? event.targetId;
-      lines.push(`${event.statusId} expired on ${targetName}.`);
+type Skill = { id: string; name: string; tag?: "single"|"multi"|"cleave"|"self" };
+type Item  = { id: string; name: string; tag?: "single"|"multi"|"self" };
+
+type Props = {
+  vm: EncounterVM;
+  skills: Skill[];
+  items: Item[];
+
+  // hooks into your engine:
+  onAct: (action: { type: "Attack"|"Skill"|"Item"|"Defend"|"Flee"; id?: string; targets?: string[] }) => void;
+
+  // optional: stream of resolution lines (we tap for crit floaters/log)
+  lastResolution?: { text: string; targetId?: string; crit?: boolean; dmg?: number };
+};
+
+export default function CombatConsole({ vm, skills, items, onAct, lastResolution }: Props) {
+  /* ─────────────────────────── menus ─────────────────────────── */
+  type Menu = "root" | "skills" | "items" | "targets";
+  const [menu, setMenu] = useState<Menu>("root");
+
+  // selection state
+  const [selectedSkill, setSelectedSkill] = useState<Skill | null>(null);
+  const [selectedItem,  setSelectedItem]  = useState<Item  | null>(null);
+  const [targetIds, setTargetIds] = useState<string[]>([]);
+
+  const enemies = vm.enemies.map(id => vm.entities[id]).filter(Boolean);
+  const party   = vm.party.map(id => vm.entities[id]).filter(Boolean);
+
+  // helpers
+  const reset = () => { setMenu("root"); setSelectedSkill(null); setSelectedItem(null); setTargetIds([]); };
+
+  /* ───────────────────────── turn strip & hud ───────────────────────── */
+  useEffect(() => {
+    // Populate HUD panels
+    const left = document.getElementById("hud-left");
+    const right = document.getElementById("hud-right");
+    if (!left || !right) return;
+
+    left.innerHTML = party.map(renderEntityRow).join("");
+    right.innerHTML = enemies.map(renderEntityRow).join("");
+
+    function renderEntityRow(e: Entity) {
+      const pct = (n:number,m:number)=> Math.max(0,Math.min(100, Math.round((n/m)*100)));
+      return `
+      <div class="entity-row">
+        <div class="entity-name">${e.name}</div>
+        <div class="meters">
+          <div class="meter hp"><i style="width:${pct(e.hp,e.hpMax)}%"></i></div>
+          ${e.mpMax ? `<div class="meter mp"><i style="width:${pct(e.mp||0,e.mpMax)}%"></i></div>` : ""}
+          ${e.stMax ? `<div class="meter st"><i style="width:${pct(e.st||0,e.stMax)}%"></i></div>` : ""}
+        </div>
+        <div class="entity-status">
+          ${(e.status||[]).slice(0,5).map(s=>`<span class="status-chip">${s}</span>`).join("")}
+        </div>
+      </div>`;
     }
-  }
-
-  return lines;
-}
-
-export default function CombatConsole() {
-  const encounter = useCombatStore((state) => state.encounter);
-  const lastResolution = useCombatStore((state) => state.lastResolution);
-  const commitDecision = useCombatStore((state) => state.commitPlayerDecision);
-  const advanceTurn = useCombatStore((state) => state.advanceTurn);
-  const activeSide = useCombatStore((state) => state.getActiveSide());
-  const activeCombat = useRunStore((state) => state.activeCombat);
-  const logCombatEvent = useRunStore((state) => state.logCombatEvent);
-  const { trigger: triggerHaptic } = useHaptics();
-
-  const [log, setLog] = useState<string[]>([]);
-  const [pending, setPending] = useState(false);
-  const scheduledRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const resolutionKeyRef = useRef<string | null>(null);
-
-  const player = useMemo<CombatEntity | null>(() => {
-    if (!encounter) return null;
-    return (
-      Object.values(encounter.entities).find((entity) => entity.faction === "player") ??
-      null
-    );
-  }, [encounter]);
-
-  const enemies = useMemo<CombatEntity[]>(() => {
-    if (!encounter) return [];
-    return Object.values(encounter.entities).filter(
-      (entity) => entity.faction === "enemy"
-    );
-  }, [encounter]);
-
-  const encounterId = encounter?.id ?? null;
+  }, [vm, enemies, party]);
 
   useEffect(() => {
-    resolutionKeyRef.current = null;
-    setLog([]);
-    setPending(false);
-    if (scheduledRef.current) {
-      clearTimeout(scheduledRef.current);
-      scheduledRef.current = null;
-    }
-  }, [encounterId]);
+    // Turn order strip
+    const strip = document.querySelector(".turn-strip") || (() => {
+      const host = document.getElementById("scene-overlay");
+      if (!host) return null;
+      const el = document.createElement("div");
+      el.className = "turn-strip";
+      host.appendChild(el);
+      return el;
+    })();
+    if (!strip) return;
+
+    strip.innerHTML = vm.order.map(id => {
+      const e = vm.entities[id];
+      const current = id === vm.turnOwnerId ? ` aria-current="true"` : "";
+      const label = e?.isPlayer ? `🛡 ${e.name}` : `⚔️ ${e?.name ?? id}`;
+      return `<div class="turn-chip"${current}>${label}</div>`;
+    }).join("");
+  }, [vm]);
+
+  /* ───────────────────────── compact log & floaters ───────────────────────── */
+  const logHostRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
-    if (!lastResolution || !encounter) return;
-    const key = `${lastResolution.actorId}:${lastResolution.actionId}:${lastResolution.events.length}:${lastResolution.telemetry.length}`;
-    if (resolutionKeyRef.current === key) return;
-    resolutionKeyRef.current = key;
-    const entries = describeResolution(lastResolution, encounter);
-    if (entries.length === 0) return;
-    setLog((prev) => [...prev, ...entries].slice(-12));
-    if (lastResolution.events) {
-      for (const event of lastResolution.events) {
-        if (event.type !== "damage") continue;
-        const target = getEntity(encounter, event.targetId);
-        if (target?.faction === "enemy") {
-          triggerHaptic("attack_hit");
-        } else if (target?.faction === "player") {
-          triggerHaptic("attack_taken");
-        }
-      }
+    // ensure compact log host exists
+    const host = document.getElementById("scene-overlay");
+    if (!host) return;
+    let log = host.querySelector(".compact-log") as HTMLDivElement | null;
+    if (!log) {
+      log = document.createElement("div");
+      log.className = "compact-log";
+      host.appendChild(log);
     }
-    entries.forEach((line, index) => {
-      const lower = line.toLowerCase();
-      let tag: CombatLogTag | undefined;
-      if (index === 0) tag = "turn";
-      else if (lower.includes("critical")) tag = "crit";
-      else if (lower.includes("damage")) tag = "hit";
-      else if (lower.includes("miss")) tag = "miss";
-      else if (lower.includes("status")) tag = "status";
-      else if (lower.includes("expired")) tag = "status";
-      logCombatEvent({
-        encounterId: encounter.id,
-        floor: activeCombat?.floor ?? 0,
-        location: activeCombat
-          ? { x: activeCombat.x, y: activeCombat.y }
-          : undefined,
-        message: line,
-        tag,
-      });
-    });
-  }, [lastResolution, encounter, logCombatEvent, activeCombat, triggerHaptic]);
-
-    useEffect(() => {
-    if (!encounter) {
-      setPending(false);
-      if (scheduledRef.current) {
-        clearTimeout(scheduledRef.current);
-        scheduledRef.current = null;
-      }
-      return;
-    }
-
-    const enemiesAlive = enemies.some((enemy) => enemy.alive);
-    if (!enemiesAlive) {
-      if (pending) setPending(false);
-      if (scheduledRef.current) {
-        clearTimeout(scheduledRef.current);
-        scheduledRef.current = null;
-      }
-      return;
-    }
-
-    if (activeSide === "enemy") {
-      if (!scheduledRef.current) {
-        setPending(true);
-        scheduledRef.current = setTimeout(() => {
-          advanceTurn();
-          scheduledRef.current = null;
-        }, 500);
-      }
-    } else {
-      if (scheduledRef.current) {
-        clearTimeout(scheduledRef.current);
-        scheduledRef.current = null;
-      }
-      if (pending) setPending(false);
-    }
-
-    return () => {
-      if (scheduledRef.current && activeSide !== "enemy") {
-        clearTimeout(scheduledRef.current);
-        scheduledRef.current = null;
-      }
-    };
-  }, [activeSide, advanceTurn, encounter, enemies, pending]);
-
-  useEffect(() => {
-    return () => {
-      if (scheduledRef.current) {
-        clearTimeout(scheduledRef.current);
-        scheduledRef.current = null;
-      }
-    };
+    logHostRef.current = log;
   }, []);
 
-  if (!encounter || !player) {
-    return (
-      <section
-        className="combat-console combat-console--empty"
-        role="region"
-        aria-label="Combat interface"
-      >
-        <p>No active encounter.</p>
-      </section>
-    );
-  }
+  useEffect(() => {
+    if (!lastResolution || !logHostRef.current) return;
 
-  const playerActions = player.actions ?? [];
-  const livingEnemies = enemies.filter((enemy) => enemy.alive);
-  const targetId = livingEnemies[0]?.id;
-  const canAct = activeSide === "player" && !pending && !!targetId;
+    const line = document.createElement("div");
+    line.textContent = lastResolution.text;
+    logHostRef.current.appendChild(line);
+    // keep last 5
+    const nodes = logHostRef.current.querySelectorAll("div");
+    if (nodes.length > 5) nodes[0].remove();
 
-  const handleAction = (actionId: string) => {
-    if (!canAct || !targetId) return;
-    commitDecision({
-      actionId,
-      targetIds: [targetId],
-      boosterOutcome: "good",
-    });
-    setPending(true);
+    // crit/damage floater
+    if (lastResolution.dmg && lastResolution.targetId) {
+      const host = document.getElementById("scene-overlay");
+      if (!host) return;
+      const f = document.createElement("div");
+      f.className = "floater" + (lastResolution.crit ? " floater--crit" : "");
+      f.textContent = lastResolution.crit ? `★ ${lastResolution.dmg}` : `${lastResolution.dmg}`;
+      // simple placement: center; could map by entity position later
+      f.style.left = "50%"; f.style.top = "55%";
+      host.appendChild(f);
+      setTimeout(() => f.remove(), 800);
+    }
+  }, [lastResolution]);
+
+  /* ───────────────────────── JRPG menus ───────────────────────── */
+  const mainCmd = (type: "Attack"|"Defend"|"Flee"|"Skill"|"Item") => {
+    if (type === "Skill") { setMenu("skills"); return; }
+    if (type === "Item")  { setMenu("items");  return; }
+    if (type === "Attack") { setMenu("targets"); return; }
+    // Defend/Flee fire immediately
+    onAct({ type });
+    reset();
   };
 
-  return (
-    <section
-      className="combat-console"
-      role="region"
-      aria-label="Combat controls"
-    >
-      <header className="combat-console__header">
-        <div className="combat-console__initiative">
-          <div className="combat-console__label">Initiative</div>
-          <div className="combat-console__value">
-            {encounter.initiative.first === "player" ? "You act first" : "Enemies act first"}
-          </div>
-        </div>
-        <div
-          className={`combat-console__turn ${pending ? "is-pending" : ""}`}
-          aria-live="polite"
-        >
-          {activeSide === "player"
-            ? pending
-              ? "Resolving..."
-              : "Your turn"
-            : "Enemy turn"}
-        </div>
-      </header>
+  const chooseSkill = (s: Skill) => { setSelectedSkill(s); setMenu("targets"); };
+  const chooseItem  = (i: Item)  => { setSelectedItem(i);  setMenu("targets"); };
 
-      <div className="combat-console__panels">
-        <div className="combat-console__panel combat-console__panel--player">
-          <div className="combat-console__panel-heading">
-            <span className="combat-console__panel-title">{player.name}</span>
-            <span className="combat-console__panel-meta">HP: {player.stats.HP}</span>
-          </div>
-          <div className="combat-console__panel-meta">
-            Focus: {player.resources?.focus ?? 0}
-          </div>
-          <div className="combat-console__section-label">Actions</div>
-          <div className="combat-console__actions">
-            {playerActions.map((action) => (
+  const toggleTarget = (id: string) => {
+    // single vs multi/cleave
+    const tag = (selectedSkill?.tag || selectedItem?.tag || "single");
+    if (tag === "single") {
+      setTargetIds([id]);
+    } else {
+      setTargetIds(prev => prev.includes(id) ? prev.filter(x=>x!==id) : [...prev, id]);
+    }
+  };
+
+  const confirmTargets = () => {
+    if (selectedSkill) { onAct({ type: "Skill", id: selectedSkill.id, targets: targetIds }); }
+    else if (selectedItem) { onAct({ type: "Item", id: selectedItem.id, targets: targetIds }); }
+    else { onAct({ type: "Attack", targets: targetIds }); }
+    reset();
+  };
+
+  /* ───────────────────────── render ───────────────────────── */
+  return (
+    <>
+      {/* controller pad */}
+      <div className="cmd-row" role="group" aria-label="Commands">
+        <button className="btn cmd btn--primary" onClick={()=>mainCmd("Attack")}>Attack</button>
+        <button className="btn cmd" onClick={()=>mainCmd("Skill")}>Skills</button>
+        <button className="btn cmd" onClick={()=>mainCmd("Item")}>Items</button>
+        <button className="btn cmd" onClick={()=>mainCmd("Defend")}>Defend</button>
+        <button className="btn cmd" onClick={()=>mainCmd("Flee")}>Flee</button>
+      </div>
+
+      {/* submenus */}
+      {menu === "skills" && (
+        <div className="submenu" role="menu" aria-label="Skills">
+          {skills.map(s=>(
+            <button key={s.id} className="btn" onClick={()=>chooseSkill(s)}>
+              {s.name}
+            </button>
+          ))}
+          <button className="btn" onClick={reset}>Back</button>
+        </div>
+      )}
+
+      {menu === "items" && (
+        <div className="submenu" role="menu" aria-label="Items">
+          {items.map(i=>(
+            <button key={i.id} className="btn" onClick={()=>chooseItem(i)}>
+              {i.name}
+            </button>
+          ))}
+          <button className="btn" onClick={reset}>Back</button>
+        </div>
+      )}
+
+      {menu === "targets" && (
+        <div className="submenu" aria-label="Targets">
+          <div className="targets">
+            {enemies.map(e=>(
               <button
-                key={action.contract.id}
-                className="combat-console__action"
-                onClick={() => handleAction(action.contract.id)}
-                disabled={!canAct}
+                key={e.id}
+                className="btn target-chip"
+                aria-selected={targetIds.includes(e.id)}
+                onClick={()=>toggleTarget(e.id)}
               >
-                <span className="combat-console__action-name">{action.contract.name}</span>
-                <span className="combat-console__action-meta">
-                  {action.contract.category.toUpperCase()}
-                </span>
+                {e.name}
               </button>
             ))}
-            {playerActions.length === 0 && (
-              <div className="combat-console__empty">No actions available.</div>
-            )}
+          </div>
+          <div className="targets">
+            {/* allow self/ally targeting when tag indicates */}
+            { (selectedSkill?.tag === "self") && party.map(p=>(
+              <button key={p.id} className="btn target-chip"
+                aria-selected={targetIds.includes(p.id)}
+                onClick={()=>toggleTarget(p.id)}
+              >{p.name}</button>
+            ))}
+          </div>
+          <div className="cmd-row" style={{gridTemplateColumns:"1fr 1fr"}}>
+            <button className="btn" onClick={confirmTargets} disabled={targetIds.length===0}>Confirm</button>
+            <button className="btn" onClick={reset}>Back</button>
           </div>
         </div>
-
-        <div className="combat-console__panel combat-console__panel--enemies">
-          <div className="combat-console__panel-title">Opponents</div>
-          {enemies.length === 0 && (
-            <div className="combat-console__empty">No enemies detected.</div>
-          )}
-          {enemies.map((enemy) => (
-            <div
-              key={enemy.id}
-              className={`combat-console__enemy ${enemy.alive ? "" : "is-defeated"}`}
-            >
-              <div className="combat-console__enemy-row">
-                <span className="combat-console__enemy-name">{enemy.name}</span>
-                <span className="combat-console__enemy-meta">HP: {Math.max(0, enemy.stats.HP)}</span>
-              </div>
-              <div className="combat-console__enemy-status">
-                {enemy.alive ? "Active" : "Defeated"}
-              </div>
-            </div>
-          ))}
-        </div>
-      </div>
-
-      <div className="combat-console__log">
-        <div className="combat-console__section-label">Combat Log</div>
-        <div className="combat-console__log-scroll" aria-live="polite">
-          {log.length === 0 && (
-            <div className="combat-console__empty">Awaiting actions...</div>
-          )}
-          {log.map((line, index) => (
-            <div
-              key={`${index}-${line}`}
-              className="combat-console__log-line"
-            >
-              {line}
-            </div>
-          ))}
-        </div>
-      </div>
-    </section>
+      )}
+    </>
   );
 }

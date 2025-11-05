@@ -1,42 +1,30 @@
 "use client";
+import { useEffect, useRef } from "react";
+import "./combat.css"; // NEW
 
-import { useEffect, useState } from "react";
-import CombatRoot from "./CombatRoot";
-import CombatConsole from "./CombatConsole";
+type Props = {
+  children: React.ReactNode; // your CombatRoot/Console lives here
+  leaving?: boolean;         // whatever you already use
+};
 
-interface CombatOverlayProps {
-  active: boolean;
-}
+export default function CombatOverlay({ children, leaving }: Props) {
+  const ref = useRef<HTMLDivElement>(null);
 
-export default function CombatOverlay({ active }: CombatOverlayProps) {
-  const [shouldRender, setShouldRender] = useState(active);
-
+  // Flag body during combat -> hides room flavor
   useEffect(() => {
-    if (active) {
-      setShouldRender(true);
-      return;
-    }
-    const timeout = setTimeout(() => setShouldRender(false), 450);
-    return () => clearTimeout(timeout);
-  }, [active]);
-
-  if (!shouldRender) {
-    return null;
-  }
-
-  const stateClass = active ? "combat-overlay--visible" : "combat-overlay--leaving";
+    document.body.dataset.combat = "1";
+    return () => { delete document.body.dataset.combat; };
+  }, []);
 
   return (
     <div
-      className={`combat-overlay ${stateClass}`}
-      role="dialog"
-      aria-modal="true"
-      aria-label="Combat encounter"
+      ref={ref}
+      className={`combat-overlay ${leaving ? "combat-overlay--leaving" : ""}`}
+      aria-live="polite"
     >
-      <div className="combat-overlay__surface">
-        <CombatRoot>
-          <CombatConsole />
-        </CombatRoot>
+      <div className="combat-root">
+        {/* Top HUD + Scene overlay + Pad are provided by nested children */}
+        {children}
       </div>
     </div>
   );

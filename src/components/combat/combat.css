@@ -1,0 +1,201 @@
+/* ==========================================================================
+   Combat — handheld layout (mobile-first), desktop scales up
+   Gothic glass skin; minimal motion; data-first visuals
+   ========================================================================== */
+
+:root {
+  --hud-gap: 10px;
+  --hud-chip-bg: rgba(18,14,28,0.65);
+  --hud-stroke: rgba(255,255,255,0.10);
+  --hud-ink: #f5f2e6;
+
+  --hp: #e65a5a;
+  --mp: #6ea9ff;
+  --st: #e6c65a;
+
+  --crit: #ffd166;
+  --miss: #cbd5e1;
+
+  --pad-r: 14px;
+}
+
+/* Hide flavor text while combat is active */
+body[data-combat="1"] .room-flavor { display: none !important; }
+
+/* Root overlay container (CombatOverlay wraps everything in here) */
+.combat-root {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  grid-template-rows: auto 1fr auto; /* HUD strip / Scene area / action pad */
+  gap: 10px;
+  padding: 10px;
+  pointer-events: none; /* sub-areas re-enable where needed */
+}
+
+/* Top HUD: left (player) | right (enemies) */
+.combat-hud {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: var(--hud-gap);
+  pointer-events: none;
+}
+
+.hud-card {
+  background: var(--hud-chip-bg);
+  border: 1px solid var(--hud-stroke);
+  border-radius: 12px;
+  padding: 10px;
+  backdrop-filter: blur(10px);
+}
+
+/* Player panel on left; enemy panel on right */
+.hud-left, .hud-right { display: grid; gap: 8px; }
+
+.entity-row {
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  gap: 8px;
+  align-items: center;
+}
+
+.entity-name { font-weight: 800; letter-spacing: .02em; }
+.entity-status { display: inline-flex; gap: 6px; flex-wrap: wrap; }
+.status-chip {
+  padding: 2px 6px;
+  border-radius: 10px;
+  background: rgba(255,255,255,0.08);
+  border: 1px solid rgba(255,255,255,0.10);
+  font-size: 12px;
+}
+
+/* Bars (HP/MP/STA) */
+.meters { display: grid; gap: 6px; }
+.meter {
+  background: rgba(255,255,255,0.06);
+  border: 1px solid var(--hud-stroke);
+  border-radius: 8px;
+  height: 8px;
+  overflow: hidden;
+}
+.meter > i { display: block; height: 100%; }
+.meter.hp > i { background: linear-gradient(90deg, #952323, var(--hp)); }
+.meter.mp > i { background: linear-gradient(90deg, #1c3f7b, var(--mp)); }
+.meter.st > i { background: linear-gradient(90deg, #6a5a22, var(--st)); }
+
+/* Middle: scene overlays (turn order strip + compact log + floaters) */
+.combat-scene-overlay {
+  position: relative;
+  pointer-events: none;
+}
+
+/* Turn order strip sits along bottom edge of the scene viewer */
+.turn-strip {
+  position: absolute;
+  left: 8px; right: 8px; bottom: 8px;
+  display: grid; grid-auto-flow: column; gap: 6px;
+  justify-content: center;
+  padding: 6px 8px;
+  background: rgba(0,0,0,0.35);
+  border: 1px solid var(--hud-stroke);
+  border-radius: 10px;
+  backdrop-filter: blur(8px);
+}
+.turn-chip {
+  padding: 4px 8px;
+  border-radius: 12px;
+  background: rgba(255,255,255,0.10);
+  border: 1px solid rgba(255,255,255,0.12);
+  font-size: 12px;
+  opacity: .8;
+}
+.turn-chip[aria-current="true"] {
+  background: rgba(255,255,255,0.20);
+  opacity: 1;
+}
+
+/* Compact log hugs the bottom-left of scene */
+.compact-log {
+  position: absolute;
+  left: 8px; bottom: 48px;
+  max-width: 70%;
+  display: grid; gap: 4px;
+  padding: 8px 10px;
+  background: rgba(0,0,0,0.35);
+  border: 1px solid var(--hud-stroke);
+  border-radius: 8px;
+  backdrop-filter: blur(8px);
+  font-size: 13px;
+}
+
+/* Damage/crit floaters */
+.floater {
+  position: absolute;
+  transform: translate(-50%, -50%);
+  padding: 4px 8px;
+  border-radius: 10px;
+  background: rgba(0,0,0,0.55);
+  border: 1px solid rgba(255,255,255,0.15);
+  font-weight: 800;
+  pointer-events: none;
+  animation: floaterUp 700ms ease-out forwards;
+}
+.floater--crit { color: var(--crit); text-shadow: 0 0 8px rgba(255,209,102,0.65); }
+
+@keyframes floaterUp {
+  from { opacity: 0; transform: translate(-50%, -10%); }
+  25% { opacity: 1; transform: translate(-50%, -30%); }
+  to { opacity: 0; transform: translate(-50%, -70%); }
+}
+
+/* Bottom: controller + nested menus */
+.combat-pad {
+  pointer-events: auto;
+  padding: 12px;
+  border-radius: var(--pad-r);
+  background: linear-gradient(180deg, rgba(22,18,30,0.08), rgba(12,10,16,0.60));
+  border: 1px solid var(--hud-stroke);
+  box-shadow: 0 14px 40px rgba(0,0,0,0.35);
+  display: grid;
+  gap: 10px;
+}
+
+/* Main commands row */
+.cmd-row {
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
+  gap: 8px;
+}
+.cmd { min-height: 44px; }
+
+/* Submenu sheet */
+.submenu {
+  display: grid;
+  gap: 8px;
+  grid-template-columns: repeat(2, 1fr);
+  padding-top: 4px;
+}
+
+/* Target selector chips */
+.targets {
+  display: grid;
+  grid-auto-flow: column;
+  gap: 8px;
+  justify-content: start;
+}
+.target-chip {
+  padding: 8px 10px;
+  border-radius: 12px;
+  background: rgba(255,255,255,0.08);
+  border: 1px solid rgba(255,255,255,0.12);
+}
+.target-chip[aria-selected="true"] {
+  background: rgba(255,255,255,0.18);
+}
+
+/* Desktop scales up the grid spacing a bit */
+@media (min-width: 1024px) {
+  .combat-root { gap: 12px; padding: 12px; }
+  .cmd-row { gap: 10px; }
+  .submenu { gap: 10px; }
+}
