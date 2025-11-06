@@ -1,4 +1,33 @@
 /* ==========================================================================
+   Shared states (mobile + desktop)
+   ========================================================================== */
+
+.console-frame {
+  background: var(--glass-panel-bg);
+  border: 1px solid var(--stroke);
+  border-radius: var(--r-md);
+  box-shadow: var(--glass-panel-shadow), var(--glass-panel-inner);
+  overflow: hidden;
+}
+
+.console-frame--combat {
+  border-color: var(--accent-combat-border);
+  box-shadow: var(--glass-panel-shadow), var(--accent-combat-glow), var(--glass-panel-inner);
+}
+
+.scene-viewer--dimmed {
+  filter: saturate(0.72) brightness(0.85);
+  transition: filter var(--t-quick) var(--easing);
+}
+
+.actions-pad {
+  background: var(--control-pad-bg);
+  border: 1px solid var(--stroke);
+  border-radius: var(--r-sm);
+  box-shadow: var(--control-pad-shadow);
+}
+
+/* ==========================================================================
    /play — Mobile layout (max-width: 1023px)
    Handheld style: screen (top) + controller (bottom), no overlap
    ========================================================================== */
@@ -20,14 +49,7 @@
   .play-right { display: none !important; }
 
   /* Handheld console shell */
-  .console-frame {
-    position: relative;
-    border-radius: var(--r-md);
-    background: linear-gradient(180deg, rgba(18,14,28,0.60), rgba(10,8,16,0.50));
-    border: 1px solid rgba(255,255,255,0.10);
-    box-shadow: 0 24px 60px rgba(0,0,0,0.45), inset 0 0 0 1px rgba(255,255,255,0.04);
-    overflow: hidden;
-  }
+  .console-frame { position: relative; }
 
   /* Stack: screen on top, controller below */
   .console-frame__content {
@@ -56,10 +78,6 @@
     position: static;          /* was absolute */
     margin-top: 4px;
     padding: 12px;
-    border-radius: var(--r-sm);
-    background: linear-gradient(180deg, rgba(22,18,30,0.08), rgba(12,10,16,0.6));
-    border: 1px solid rgba(255,255,255,0.10);
-    box-shadow: 0 14px 40px rgba(0,0,0,0.40);
     z-index: 1;                /* just in case */
   }
 

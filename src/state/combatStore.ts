@@ -12,7 +12,7 @@ import type {
   EnemyContract,
 } from "@/engine/combat/types";
 
-const ENEMY_TURN_DELAY_MS = 450;
+const ENEMY_TURN_DELAY_MS = 900;
 
 interface CombatStoreState {
   encounter: Encounter | null;

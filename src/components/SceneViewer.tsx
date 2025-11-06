@@ -113,11 +113,28 @@ export default function SceneViewer({
       )}
 
       {caption && !overlayCentered && (
-        <div aria-live="polite" style={{ position: "absolute", left: 0, right: 0, bottom: 0, padding: "10px 12px", fontSize: 14, color: "#e5e7eb", background: "linear-gradient(0deg, rgba(0,0,0,0.5), rgba(0,0,0,0))", textShadow: "0 1px 1px rgba(0,0,0,0.6)" }}>{caption}</div>
+        <div
+          aria-live="polite"
+          className="scene-viewer__caption scene-viewer__caption--bottom"
+          style={{
+            position: "absolute",
+            left: 0,
+            right: 0,
+            bottom: 0,
+            padding: "10px 12px",
+            fontSize: 14,
+            color: "#e5e7eb",
+            background: "linear-gradient(0deg, rgba(0,0,0,0.5), rgba(0,0,0,0))",
+            textShadow: "0 1px 1px rgba(0,0,0,0.6)",
+          }}
+        >
+          {caption}
+        </div>
       )}
 
       {caption && overlayCentered && (
         <div
+          className="scene-viewer__caption scene-viewer__caption--centered"
           aria-live="polite"
           style={{
             position: "absolute",

@@ -1,6 +1,7 @@
 "use client";
 
 import clsx from "clsx";
+import type { CSSProperties } from "react";
 import styles from "./CompactMeters.module.css";
 
 export type GaugeValue = {
@@ -38,6 +39,13 @@ function MeterRow({ meter }: { meter: GaugeValue }) {
   const ratio = pct(meter.current, meter.max);
   const percent = Math.round(ratio * 100);
   const value = `${meter.current}/${meter.max}`;
+  const fillStyle: CSSProperties & { "--meter-color"?: string } = {
+    transform: `scaleX(${ratio})`,
+  };
+
+  if (meter.color) {
+    fillStyle["--meter-color"] = meter.color;
+  }
 
   return (
     <div className={styles.meterRow}>
@@ -48,7 +56,7 @@ function MeterRow({ meter }: { meter: GaugeValue }) {
         <div className={styles.meterHeader}>
           <span className={styles.label}>{meter.label}</span>
         </div>
-        <div className={styles.fill} style={{ transform: `scaleX(${ratio})`, ["--meter-color" as const]: meter.color ?? "" }} />
+        <div className={styles.fill} style={fillStyle} />
         <div className={styles.value}>{value}</div>
       </div>
     </div>

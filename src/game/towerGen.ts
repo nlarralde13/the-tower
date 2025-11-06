@@ -1,5 +1,5 @@
 import type { FloorMap, Room, RoomType } from "./types";
-import { createRNG, mixSeed } from "./rng";
+import { createRNG, mixSeed } from "@/engine/rng";
 
 type Vec = { x: number; y: number };
 

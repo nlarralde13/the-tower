@@ -12,6 +12,19 @@ export function mulberry32(seed: number) {
 
 export type RNG = () => number;
 
+export function createRNG(seed: number): RNG {
+  return mulberry32(seed);
+}
+
+export function mixSeed(...parts: number[]): number {
+  let x = 0x9e3779b9;
+  for (const part of parts) {
+    x ^= part + 0x9e3779b9 + ((x << 6) >>> 0) + (x >>> 2);
+    x >>>= 0;
+  }
+  return x >>> 0;
+}
+
 export class SeededRNG {
   private readonly seed: number;
   private state: number;

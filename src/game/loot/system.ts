@@ -1,4 +1,4 @@
-import { createRNG, mixSeed } from "@/game/rng";
+import { createRNG, mixSeed } from "@/engine/rng";
 
 import {
   bossTables,
@@ -75,7 +75,7 @@ function applyMultipliers<T extends string>(
 }
 
 function normalizeWeights<T extends string>(weights: WeightMap<T>): WeightMap<T> {
-  const total = Object.values(weights).reduce((acc, v) => acc + v, 0);
+  const total = (Object.values(weights) as number[]).reduce((acc, v) => acc + v, 0);
   if (total <= 0) return weights;
   const result: Partial<WeightMap<T>> = {};
   for (const key of Object.keys(weights) as T[]) {
@@ -232,8 +232,8 @@ export function generateEnemyLoot(ctx: LootContext): LootResult {
     if (!hasUncommonOrBetter) {
       const preferredCategories: LootCategory[] = [];
       for (const drop of drops) {
-        if (!preferredCategories.includes(drop.category)) {
-          preferredCategories.push(drop.category);
+        if (drop.category !== "uniques" && !preferredCategories.includes(drop.category as LootCategory)) {
+          preferredCategories.push(drop.category as LootCategory);
         }
       }
       const weightedCategories = Object.entries(categoryWeights)

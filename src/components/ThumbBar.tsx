@@ -55,6 +55,61 @@ export default function ThumbBar({
     [disabled, onMove]
   );
 
+  const handleAscend = useCallback(() => {
+    if (disabled) return;
+    onAscend?.();
+  }, [disabled, onAscend]);
+
+  const handleInteract = useCallback(() => {
+    if (disabled) return;
+    onInteract?.();
+  }, [disabled, onInteract]);
+
+  const handleAttack = useCallback(() => {
+    if (disabled) return;
+    onAttack?.();
+  }, [disabled, onAttack]);
+
+  const handleSkill = useCallback(() => {
+    if (disabled) return;
+    onSkill?.();
+  }, [disabled, onSkill]);
+
+  const handleItem = useCallback(() => {
+    if (disabled) return;
+    onItem?.();
+  }, [disabled, onItem]);
+
+  const handleDefend = useCallback(() => {
+    if (disabled) return;
+    onDefend?.();
+  }, [disabled, onDefend]);
+
+  const handleBack = useCallback(() => {
+    if (disabled) return;
+    onBack?.();
+  }, [disabled, onBack]);
+
+  const handleOpenJournal = useCallback(() => {
+    if (disabled) return;
+    onOpenJournal?.();
+  }, [disabled, onOpenJournal]);
+
+  const handleOpenMap = useCallback(() => {
+    if (disabled) return;
+    onOpenMap?.();
+  }, [disabled, onOpenMap]);
+
+  const handleOpenCharacter = useCallback(() => {
+    if (disabled) return;
+    onOpenCharacter?.();
+  }, [disabled, onOpenCharacter]);
+
+  const handleLookAround = useCallback(() => {
+    if (disabled) return;
+    onLookAround?.();
+  }, [disabled, onLookAround]);
+
   return (
     <div
       className={[
@@ -69,10 +124,10 @@ export default function ThumbBar({
         <div className={styles.utilityRow} role="group" aria-label="Utility actions">
           {utilityActions ?? (
             <>
-              <button className={styles.button} onClick={onOpenJournal} aria-label="Open journal">Journal</button>
-              <button className={styles.button} onClick={onOpenMap} aria-label="Open map">Map</button>
-              <button className={styles.button} onClick={onOpenCharacter} aria-label="Open character">Inventory</button>
-              <button className={styles.button} onClick={onLookAround} aria-label="Look around">Look Around</button>
+              <button className={styles.button} onClick={handleOpenJournal} aria-label="Open journal">Journal</button>
+              <button className={styles.button} onClick={handleOpenMap} aria-label="Open map">Map</button>
+              <button className={styles.button} onClick={handleOpenCharacter} aria-label="Open character">Inventory</button>
+              <button className={styles.button} onClick={handleLookAround} aria-label="Look around">Look Around</button>
             </>
           )}
         </div>
@@ -85,7 +140,7 @@ export default function ThumbBar({
             <ActionButton
               label="Ascend"
               ariaLabel="Ascend to next floor"
-              onClick={onAscend}
+              onClick={handleAscend}
               disabled={disabled}
             />
           )}
@@ -105,23 +160,23 @@ export default function ThumbBar({
         <div className={styles.cluster}>
           {mode === "combat" ? (
             <div className={styles.gridActions} aria-label="Combat actions">
-              <ActionButton label="Attack" ariaLabel="Attack" onClick={onAttack} disabled={disabled} onLongPress={onAttack} />
-              <ActionButton label="Skill" ariaLabel="Use skill" onClick={onSkill} disabled={disabled} onLongPress={onSkill} />
-              <ActionButton label="Item" ariaLabel="Use item" onClick={onItem} disabled={disabled} onLongPress={onItem} />
-              <ActionButton label="Defend" ariaLabel="Defend" onClick={onDefend} disabled={disabled} onLongPress={onDefend} />
+              <ActionButton label="Attack" ariaLabel="Attack" onClick={handleAttack} disabled={disabled} onLongPress={handleAttack} />
+              <ActionButton label="Skill" ariaLabel="Use skill" onClick={handleSkill} disabled={disabled} onLongPress={handleSkill} />
+              <ActionButton label="Item" ariaLabel="Use item" onClick={handleItem} disabled={disabled} onLongPress={handleItem} />
+              <ActionButton label="Defend" ariaLabel="Defend" onClick={handleDefend} disabled={disabled} onLongPress={handleDefend} />
             </div>
           ) : (
             <div className={styles.interact}>
               <ActionButton
                 label="Interact"
                 ariaLabel="Interact with the room"
-                onClick={onInteract}
+                onClick={handleInteract}
                 disabled={disabled}
-                onLongPress={onInteract}
+                onLongPress={handleInteract}
               />
             </div>
           )}
-          <ActionButton label="Back" ariaLabel="Go back" onClick={onBack} disabled={disabled} />
+          <ActionButton label="Back" ariaLabel="Go back" onClick={handleBack} disabled={disabled} />
         </div>
       </div>
     </div>
@@ -142,12 +197,12 @@ function ActionButton({
   onLongPress?: () => void;
   disabled?: boolean;
 }) {
-  const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const timerRef = useRef<number | null>(null);
   const didLongPressRef = useRef(false);
 
   const clearTimer = () => {
-    if (timerRef.current) {
-      clearTimeout(timerRef.current);
+    if (timerRef.current !== null) {
+      window.clearTimeout(timerRef.current);
       timerRef.current = null;
     }
   };

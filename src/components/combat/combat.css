@@ -20,7 +20,7 @@
 }
 
 /* Hide flavor text while combat is active */
-body[data-combat="1"] .room-flavor { display: none !important; }
+body[data-combat="1"] .scene-viewer__caption--bottom { display: none !important; }
 
 /* Root overlay container (CombatOverlay wraps everything in here) */
 .combat-root {
@@ -32,6 +32,227 @@ body[data-combat="1"] .room-flavor { display: none !important; }
   padding: 10px;
   pointer-events: none; /* sub-areas re-enable where needed */
 }
+
+.combat-banner {
+  position: absolute;
+  left: 50%;
+  top: 16px;
+  transform: translateX(-50%);
+  padding: 10px 16px;
+  border-radius: 14px;
+  background: rgba(18,14,28,0.78);
+  border: 1px solid rgba(255,255,255,0.2);
+  box-shadow: 0 18px 32px rgba(0,0,0,0.45);
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  color: #f8f7ef;
+  pointer-events: none;
+  z-index: 3;
+}
+
+/* Viewer stats rail */
+.stats-rail {
+  --meter-gap: 8px;
+  --meter-height: 12px;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: var(--meter-gap);
+  padding: 12px 16px 0;
+  width: 100%;
+  pointer-events: auto;
+  opacity: 0;
+  transform: translateY(-10px);
+  transition: opacity 220ms ease, transform 220ms ease;
+  z-index: 1;
+}
+
+.stats-rail--visible {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+.stats-rail--leaving {
+  opacity: 0;
+  transform: translateY(-8px);
+}
+
+.stats-rail > .entity-panel {
+  width: 100%;
+}
+
+.entity-panel {
+  display: grid;
+  gap: var(--meter-gap);
+  padding: 14px;
+  background: var(--glass-bg, rgba(18,14,28,0.75));
+  border: 1px solid var(--glass-border, rgba(255,255,255,0.08));
+  box-shadow: var(--glass-shadow, 0 18px 32px rgba(0,0,0,0.45));
+  border-radius: var(--radius-md, 12px);
+  backdrop-filter: blur(var(--blur-sm, 8px));
+  color: var(--hud-ink);
+  min-width: 0;
+}
+
+.entity-panel--left {
+  justify-self: stretch;
+}
+
+.entity-panel--right {
+  justify-self: stretch;
+}
+
+.entity-panel--ko .entity-meter__track > i {
+  filter: grayscale(0.8);
+  opacity: 0.75;
+}
+
+.entity-panel--ko .status-chip {
+  opacity: 0.6;
+}
+
+.entity-panel--ko .entity-ko-badge {
+  background: rgba(230,90,90,0.35);
+  border-color: rgba(230,90,90,0.55);
+}
+
+.entity-panel .entity-name {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-weight: 800;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--hud-ink);
+}
+
+.entity-panel .entity-name > span:first-child {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.entity-ko-badge {
+  font-size: 11px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  padding: 2px 8px;
+  border-radius: var(--radius-sm, 8px);
+  border: 1px solid rgba(233,150,215,0.6);
+  background: rgba(233,150,215,0.24);
+  font-weight: 700;
+}
+
+.entity-meters {
+  display: grid;
+  gap: var(--meter-gap);
+}
+
+.entity-meter {
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  gap: 8px;
+  align-items: center;
+  font-size: 12px;
+  color: rgba(245,242,230,0.85);
+}
+
+.entity-meter__label {
+  font-size: 11px;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: rgba(245,242,230,0.64);
+}
+
+.entity-meter__track {
+  position: relative;
+  height: var(--meter-height);
+  border-radius: var(--radius-sm, 8px);
+  background: rgba(255,255,255,0.10);
+  border: 1px solid var(--glass-border, rgba(255,255,255,0.10));
+  overflow: hidden;
+}
+
+.entity-meter__track > i {
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  transition: width 180ms ease;
+}
+
+.entity-meter--hp .entity-meter__track > i {
+  background: linear-gradient(90deg, #952323, var(--hp));
+}
+
+.entity-meter--mp .entity-meter__track > i {
+  background: linear-gradient(90deg, #1c3f7b, var(--mp));
+}
+
+.entity-meter--sta .entity-meter__track > i {
+  background: linear-gradient(90deg, #6a5a22, var(--st));
+}
+
+.entity-meter__value {
+  font-size: 12px;
+  font-weight: 600;
+  color: rgba(245,242,230,0.9);
+  text-shadow: 0 0 6px rgba(0,0,0,0.45);
+}
+
+.entity-statuses {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  align-items: center;
+  color: rgba(245,242,230,0.9);
+}
+
+.entity-panel .status-chip {
+  padding: 3px 10px;
+  border-radius: var(--radius-sm, 8px);
+  background: rgba(255,255,255,0.10);
+  border: 1px solid rgba(255,255,255,0.14);
+  font-size: 12px;
+  line-height: 1.2;
+  color: inherit;
+  transition: background 150ms ease, border-color 150ms ease, opacity 150ms ease;
+}
+
+.entity-panel .status-chip--buff {
+  background: rgba(110,169,255,0.18);
+  border-color: rgba(110,169,255,0.45);
+}
+
+.entity-panel .status-chip--debuff {
+  background: rgba(230,90,90,0.20);
+  border-color: rgba(230,90,90,0.48);
+}
+
+.entity-panel .status-chip--neutral {
+  background: rgba(255,255,255,0.10);
+  border-color: rgba(255,255,255,0.20);
+}
+
+.entity-panel .status-chip--overflow {
+  font-weight: 700;
+  letter-spacing: 0.08em;
+}
+
+@media (min-width: 1024px) {
+  .stats-rail {
+    grid-template-columns: repeat(12, minmax(0, 1fr));
+    column-gap: 18px;
+    row-gap: 0;
+    padding: 16px 24px 0;
+  }
+
+  .stats-rail > .entity-panel--left {
+    grid-column: 1 / span 5;
+  }
+
+  .stats-rail > .entity-panel--right {
+    grid-column: 8 / span 5;
+  }
+}
+
 
 /* Top HUD: left (player) | right (enemies) */
 .combat-hud {
@@ -51,12 +272,28 @@ body[data-combat="1"] .room-flavor { display: none !important; }
 
 /* Player panel on left; enemy panel on right */
 .hud-left, .hud-right { display: grid; gap: 8px; }
+.hud-empty {
+  margin: 4px 0;
+  font-size: 12px;
+  opacity: 0.7;
+}
 
 .entity-row {
   display: grid;
   grid-template-columns: auto 1fr auto;
   gap: 8px;
   align-items: center;
+}
+.entity-row--down { opacity: 0.72; }
+.entity-tag {
+  margin-left: 6px;
+  padding: 2px 8px;
+  border-radius: 999px;
+  border: 1px solid rgba(244,114,182,0.45);
+  background: rgba(244,114,182,0.15);
+  font-size: 11px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
 }
 
 .entity-name { font-weight: 800; letter-spacing: .02em; }
@@ -68,20 +305,48 @@ body[data-combat="1"] .room-flavor { display: none !important; }
   border: 1px solid rgba(255,255,255,0.10);
   font-size: 12px;
 }
+.status-chip--empty {
+  font-style: italic;
+  opacity: 0.6;
+}
 
 /* Bars (HP/MP/STA) */
-.meters { display: grid; gap: 6px; }
+.meters { display: grid; gap: 8px; }
+.meter-row {
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  gap: 8px;
+  align-items: center;
+}
+.meter-label {
+  font-size: 11px;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: rgba(245,242,230,0.7);
+}
 .meter {
+  position: relative;
   background: rgba(255,255,255,0.06);
   border: 1px solid var(--hud-stroke);
   border-radius: 8px;
-  height: 8px;
+  height: 10px;
   overflow: hidden;
 }
-.meter > i { display: block; height: 100%; }
+.meter > i {
+  position: absolute;
+  inset: 0;
+  display: block;
+  height: 100%;
+}
 .meter.hp > i { background: linear-gradient(90deg, #952323, var(--hp)); }
 .meter.mp > i { background: linear-gradient(90deg, #1c3f7b, var(--mp)); }
 .meter.st > i { background: linear-gradient(90deg, #6a5a22, var(--st)); }
+.meter-value {
+  font-size: 12px;
+  font-weight: 600;
+  color: rgba(245,242,230,0.9);
+  text-shadow: 0 0 4px rgba(0,0,0,0.45);
+}
 
 /* Middle: scene overlays (turn order strip + compact log + floaters) */
 .combat-scene-overlay {
@@ -139,6 +404,7 @@ body[data-combat="1"] .room-flavor { display: none !important; }
   font-weight: 800;
   pointer-events: none;
   animation: floaterUp 700ms ease-out forwards;
+  z-index: 2;
 }
 .floater--crit { color: var(--crit); text-shadow: 0 0 8px rgba(255,209,102,0.65); }
 
@@ -149,11 +415,11 @@ body[data-combat="1"] .room-flavor { display: none !important; }
 }
 
 /* Bottom: controller + nested menus */
-.combat-pad {
+.control-pad[data-mode="combat"] .control-pad__surface {
   pointer-events: auto;
   padding: 12px;
   border-radius: var(--pad-r);
-  background: linear-gradient(180deg, rgba(22,18,30,0.08), rgba(12,10,16,0.60));
+  background: var(--control-pad-bg, linear-gradient(180deg, rgba(22,18,30,0.08), rgba(12,10,16,0.60)));
   border: 1px solid var(--hud-stroke);
   box-shadow: 0 14px 40px rgba(0,0,0,0.35);
   display: grid;
@@ -189,7 +455,8 @@ body[data-combat="1"] .room-flavor { display: none !important; }
   background: rgba(255,255,255,0.08);
   border: 1px solid rgba(255,255,255,0.12);
 }
-.target-chip[aria-selected="true"] {
+.target-chip[aria-selected="true"],
+.target-chip[aria-pressed="true"] {
   background: rgba(255,255,255,0.18);
 }
 

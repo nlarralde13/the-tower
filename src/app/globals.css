@@ -26,6 +26,21 @@
   --glass-strong:   rgba(18, 14, 28, 0.82);
   --stroke:         rgba(255, 255, 255, 0.08);
   --inner-stroke:   rgba(255, 255, 255, 0.06);
+  --glass-panel-bg: linear-gradient(180deg, rgba(18,14,28,0.60), rgba(10,8,16,0.50));
+  --glass-panel-shadow: 0 24px 60px rgba(0,0,0,0.45);
+  --glass-panel-inner: inset 0 0 0 1px var(--inner-stroke);
+  --control-pad-bg: linear-gradient(180deg, rgba(22,18,30,0.08), rgba(12,10,16,0.60));
+  --control-pad-shadow: 0 14px 40px rgba(0,0,0,0.35);
+  --accent-combat-border: rgba(244,114,182,0.35);
+  --accent-combat-glow: 0 0 0 1px rgba(244,114,182,0.18);
+
+  /* Shared gothic glass tokens */
+  --glass-bg: var(--glass);
+  --glass-border: var(--stroke);
+  --glass-shadow: var(--shadow-1);
+  --radius-sm: var(--r-sm);
+  --radius-md: var(--r-md);
+  --blur-sm: 10px;
 
   /* Radii, shadow */
   --r-xs: 10px;  --r-sm: 14px;  --r-md: 18px;  --r-lg: 24px;  --r-xl: 28px;

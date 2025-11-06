@@ -1,4 +1,4 @@
-import type { RNG } from "@/game/rng";
+import type { RNG } from "@/engine/rng";
 
 export type LootRarity = "common" | "uncommon" | "rare" | "epic" | "legendary";
 export const LOOT_RARITIES: LootRarity[] = [

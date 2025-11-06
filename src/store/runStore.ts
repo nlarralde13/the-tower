@@ -92,7 +92,7 @@ export type RunState = {
 type RunActions = {
   enterRun: () => Promise<void>;
   resumeFromStorage: () => void;
-  move: (dir: "north" | "south" | "west" | "east") => void;
+  move: (dir: "north" | "south" | "west" | "east" | "N" | "S" | "E" | "W") => void;
   roomTypeAt: (x: number, y: number) => RoomType | null;
   toggleGridOverlay: (on?: boolean) => void;
   _devSetRunFromSeed?: (floor: number, floorSeed: number) => Promise<void>;
@@ -110,6 +110,12 @@ const STORAGE_KEY = "runState:v1";
 const RUN_LOG_LIMIT = 200;
 const COMBAT_LOG_LIMIT = 400;
 const COMBAT_BUFFER_LIMIT = 160;
+const LETTER_TO_WORD: Record<"N" | "S" | "E" | "W", "north" | "south" | "east" | "west"> = {
+  N: "north",
+  S: "south",
+  E: "east",
+  W: "west",
+};
 
 function rand32(): number {
   if (typeof crypto !== "undefined" && "getRandomValues" in crypto) {
@@ -311,6 +317,34 @@ function buildLootSummary(params: {
   };
 }
 
+function buildSnapshot(
+  state: RunState & Partial<RunActions>,
+  overrides: Partial<RunState> = {}
+): RunState {
+  return {
+    runId: overrides.runId ?? state.runId,
+    runSeed: overrides.runSeed ?? state.runSeed,
+    currentFloor: overrides.currentFloor ?? state.currentFloor,
+    floorSeeds: overrides.floorSeeds ?? state.floorSeeds,
+    grid: overrides.grid ?? state.grid,
+    playerPos: overrides.playerPos ?? state.playerPos,
+    mode: overrides.mode ?? state.mode,
+    sceneId: overrides.sceneId ?? state.sceneId,
+    pools: overrides.pools ?? state.pools,
+    completedRooms: overrides.completedRooms ?? state.completedRooms,
+    visitedRooms: overrides.visitedRooms ?? state.visitedRooms,
+    runLog: overrides.runLog ?? state.runLog,
+    combatLog: overrides.combatLog ?? state.combatLog,
+    combatLogBuffer: overrides.combatLogBuffer ?? state.combatLogBuffer,
+    combatLogEncounterId:
+      overrides.combatLogEncounterId ?? state.combatLogEncounterId,
+    activeCombat: overrides.activeCombat ?? state.activeCombat,
+    defeatOverlay: overrides.defeatOverlay ?? state.defeatOverlay,
+    dev: overrides.dev ?? state.dev,
+    nextEncounterSerial: overrides.nextEncounterSerial ?? state.nextEncounterSerial,
+  };
+}
+
 const DEFAULT_PLAYER_TEMPLATE: StartEncounterState["player"] = {
   id: "runner",
   name: "Runner",
@@ -450,16 +484,19 @@ export const useRunStore = create<RunState & RunActions>((set, get) => ({
       dedupeKey,
     };
     set((prev) => {
-      const runLog = appendRunLog(prev.runLog ?? [], entry);
+      const runLog = appendRunLog(prev.runLog, entry);
+      if (runLog === prev.runLog) {
+        return prev;
+      }
       if (typeof window !== "undefined") {
         try {
-          const snapshot = { ...(prev as RunState), runLog };
+          const snapshot = buildSnapshot(prev, { runLog });
           localStorage.setItem(STORAGE_KEY, JSON.stringify(snapshot));
         } catch {
           // ignore persistence failures
         }
       }
-      return { runLog };
+      return { ...prev, runLog };
     });
   },
 
@@ -475,65 +512,107 @@ export const useRunStore = create<RunState & RunActions>((set, get) => ({
       tag,
     };
     set((prev) => {
-      const nextState: Partial<RunState> = {};
-      const bufferEncounter = prev.combatLogEncounterId;
-      let buffer = prev.combatLogBuffer ?? [];
-      let persisted = prev.combatLog ?? [];
-      if (bufferEncounter && bufferEncounter !== encounterId && buffer.length) {
-        for (const entry of buffer) {
-          persisted = appendCombatLog(persisted, entry);
+      let persisted = prev.combatLog;
+      let buffer = prev.combatLogBuffer;
+      let changed = false;
+
+      if (
+        prev.combatLogEncounterId &&
+        prev.combatLogEncounterId !== encounterId &&
+        buffer.length
+      ) {
+        for (const buffered of buffer) {
+          const nextPersisted = appendCombatLog(persisted, buffered);
+          if (nextPersisted !== persisted) {
+            persisted = nextPersisted;
+            changed = true;
+          }
         }
         buffer = [];
+        changed = true;
       }
-      buffer = appendCombatLog(buffer, entry);
-      if (buffer.length > COMBAT_BUFFER_LIMIT) {
-        buffer = buffer.slice(-COMBAT_BUFFER_LIMIT);
+
+      let nextBuffer = appendCombatLog(buffer, entry);
+      if (nextBuffer !== buffer) {
+        changed = true;
       }
-      nextState.combatLog = persisted;
-      nextState.combatLogBuffer = buffer;
-      nextState.combatLogEncounterId = encounterId;
+      if (nextBuffer.length > COMBAT_BUFFER_LIMIT) {
+        nextBuffer = nextBuffer.slice(-COMBAT_BUFFER_LIMIT);
+        changed = true;
+      }
+
+      const nextState: Partial<RunState> = {
+        combatLog: persisted,
+        combatLogBuffer: nextBuffer,
+        combatLogEncounterId: encounterId,
+      };
+
+      if (
+        !changed &&
+        persisted === prev.combatLog &&
+        nextBuffer === prev.combatLogBuffer &&
+        encounterId === prev.combatLogEncounterId
+      ) {
+        return prev;
+      }
+
       if (typeof window !== "undefined") {
         try {
-          const snapshot = {
-            ...(prev as RunState),
-            combatLog: nextState.combatLog,
-            combatLogBuffer: nextState.combatLogBuffer,
-            combatLogEncounterId: encounterId,
-          };
+          const snapshot = buildSnapshot(prev, nextState);
           localStorage.setItem(STORAGE_KEY, JSON.stringify(snapshot));
         } catch {
           // ignore persistence failures
         }
       }
-      return nextState;
+
+      return { ...prev, ...nextState };
     });
   },
 
   flushCombatToPersistent: () => {
     set((prev) => {
-      let combined = prev.combatLog ?? [];
-      for (const entry of prev.combatLogBuffer ?? []) {
-        combined = appendCombatLog(combined, entry);
+      if (prev.combatLogBuffer.length === 0 && prev.combatLogEncounterId === null) {
+        return prev;
+      }
+      let combined = prev.combatLog;
+      let changed = false;
+      for (const entry of prev.combatLogBuffer) {
+        const next = appendCombatLog(combined, entry);
+        if (next !== combined) {
+          combined = next;
+          changed = true;
+        }
       }
       const nextState: Partial<RunState> = {
         combatLog: combined,
         combatLogBuffer: [],
         combatLogEncounterId: null,
       };
+      if (!changed && prev.combatLogBuffer.length === 0 && prev.combatLogEncounterId === null) {
+        return prev;
+      }
       if (typeof window !== "undefined") {
         try {
-          const snapshot = { ...(prev as RunState), ...nextState };
+          const snapshot = buildSnapshot(prev, nextState);
           localStorage.setItem(STORAGE_KEY, JSON.stringify(snapshot));
         } catch {
           // ignore persistence failures
         }
       }
-      return nextState;
+      return { ...prev, ...nextState };
     });
   },
 
   clearRunLogs: () => {
     set((prev) => {
+      if (
+        prev.runLog.length === 0 &&
+        prev.combatLog.length === 0 &&
+        prev.combatLogBuffer.length === 0 &&
+        prev.combatLogEncounterId === null
+      ) {
+        return prev;
+      }
       const nextState: Partial<RunState> = {
         runLog: [],
         combatLog: [],
@@ -542,13 +621,13 @@ export const useRunStore = create<RunState & RunActions>((set, get) => ({
       };
       if (typeof window !== "undefined") {
         try {
-          const snapshot = { ...(prev as RunState), ...nextState };
+          const snapshot = buildSnapshot(prev, nextState);
           localStorage.setItem(STORAGE_KEY, JSON.stringify(snapshot));
         } catch {
           // ignore persistence failures
         }
       }
-      return nextState;
+      return { ...prev, ...nextState };
     });
   },
 
@@ -669,14 +748,19 @@ export const useRunStore = create<RunState & RunActions>((set, get) => ({
     const grid = s.grid;
     const pos = s.playerPos;
     if (!grid || !pos) return;
+    const normalizedDir =
+      typeof dir === "string" && dir.length === 1
+        ? LETTER_TO_WORD[dir.toUpperCase() as "N" | "S" | "E" | "W"]
+        : (dir as "north" | "south" | "east" | "west");
+    if (!normalizedDir) return;
     const W = grid.width;
     const H = grid.height;
     let nx = pos.x;
     let ny = pos.y;
-    if (dir === "north") ny -= 1;
-    else if (dir === "south") ny += 1;
-    else if (dir === "west") nx -= 1;
-    else if (dir === "east") nx += 1;
+    if (normalizedDir === "north") ny -= 1;
+    else if (normalizedDir === "south") ny += 1;
+    else if (normalizedDir === "west") nx -= 1;
+    else if (normalizedDir === "east") nx += 1;
     nx = clamp(nx, 0, W - 1);
     ny = clamp(ny, 0, H - 1);
 

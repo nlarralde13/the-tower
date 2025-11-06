@@ -17,18 +17,18 @@ import "./play.mobile.css";
 import { useEffect, useMemo, useRef, useState } from "react";
 import PageSurface from "@/components/PageSurface";
 import SceneViewer from "@/components/SceneViewer";
-import ThumbBar from "@/components/ThumbBar";
 import CombatOverlay from "@/components/combat/CombatOverlay";
 import CompactMeterGroup, { type GaugeValue } from "@/components/hud/CompactMeters";
 import SlideDrawer from "@/components/drawers/SlideDrawer";
-import { useUIStore, type PanelName } from "@/store/uiStore";
+import { useUIStore } from "@/store/uiStore";
+import type { PanelName } from "@/store/uiStore";
 import { useRunStore } from "@/store/runStore";
-import { useCombatStore } from "@/state/combatStore";
 import { useHaptics } from "@/hooks/useHaptics";
 import { chooseFlavor, exitsFlavor } from "@/game/flavor";
 import { getEnemyDefinition } from "@/content/index";
 import { useRouter, useSearchParams } from "next/navigation";
 import { playMusic } from "@/utils/audioManager";
+import ControlPad from "@/components/console/ControlPad";
 
 /* =================================================================
    PAGE COMPONENT
@@ -64,13 +64,16 @@ export default function PlayPage() {
   const activeCombat = useRunStore((s) => s.activeCombat);
   const defeatOverlay = useRunStore((s) => s.defeatOverlay);
 
+  //Run+UI store updates
+  const runMode = useRunStore((s) => s.mode); // existing: "explore" | "combat"
+  const setMode = useUIStore((s) => s.setMode);
+
   /* --------------------------------------------------------------
    * UI STORE — drawers & panels
    * -------------------------------------------------------------- */
   const characterOpen = useUIStore((state) => state.openPanels.character);
   const mapOpen = useUIStore((state) => state.openPanels.map);
   const journalOpen = useUIStore((state) => state.openPanels.journal);
-  const combatDrawerOpen = useUIStore((state) => state.openPanels.combatActions);
   const togglePanel = useUIStore((state) => state.toggle);
   const closePanel = useUIStore((state) => state.close);
   const openPanel = useUIStore((state) => state.open);
@@ -87,7 +90,9 @@ export default function PlayPage() {
   /* --------------------------------------------------------------
    * Ambient audio (looped music)
    * -------------------------------------------------------------- */
-  playMusic("/audio/tower_theme.mp3");
+  useEffect(() => {
+    playMusic("/audio/tower_theme.mp3");
+  }, [runId]);
 
   /* --------------------------------------------------------------
    * Lifecycle: resume from storage, apply dev overlay, guard route
@@ -95,6 +100,11 @@ export default function PlayPage() {
   useEffect(() => {
     resume();
   }, [resume]);
+
+  //Sync Modes
+  useEffect(() => {
+    setMode(runMode === "combat" ? "combat" : "explore");
+  }, [runMode, setMode]);
 
   // Allow dev overlay via ?overlay=1
   useEffect(() => {
@@ -146,7 +156,7 @@ export default function PlayPage() {
   // Viewer caption priority:
   //   combat > cleared-room line > exploration flavor
   const viewerCaption = useMemo(() => {
-    if (mode === "combat") return combatCaption ?? caption;
+    if (mode === "combat") return combatCaption;
     if (currentKey && completedRooms?.[currentKey]) {
       const base = caption ?? "";
       return `${base} ${clearedRoomMessage}`.trim();
@@ -170,10 +180,7 @@ export default function PlayPage() {
   );
 
   // Open/close combat action sheet based on mode
-  useEffect(() => {
-    if (mode === "combat") openPanel("combatActions");
-    else closePanel("combatActions");
-  }, [mode, openPanel, closePanel]);
+ 
 
   /* --------------------------------------------------------------
    * Helpers — announce (aria-live), inspect, end run, back
@@ -243,7 +250,7 @@ export default function PlayPage() {
    * RENDER
    * =============================================================== */
   return (
-    <PageSurface >
+    <PageSurface>
       {/* ============================================================
           MAIN GRID — left rail / middle console / right rail
           ============================================================ */}
@@ -270,18 +277,14 @@ export default function PlayPage() {
         {/* ============================================================
             LEFT RAIL — Inventory + Character
             ============================================================ */}
-        <aside className="play-left">
-        </aside>
+        <aside className="play-left" aria-label="Hero overview" />
 
         {/* ============================================================
             MIDDLE — Scene viewer + overlayed action pad + combat layer
             ============================================================ */}
         <section className="play-middle">
-          {/* The "console-frame" visually frames the scene area */}
           <div className={`console-frame ${combatActive ? "console-frame--combat" : ""}`}>
-            {/* console-frame__content must be position:relative so the actions pad can overlay */}
             <div className="console-frame__content" aria-hidden={combatActive}>
-              {/* SCENE SURFACE — the artwork / background stays visible under overlays */}
               <div className={`scene-surface ${combatActive ? "scene-surface--locked" : ""}`}>
                 <SceneViewer
                   className={`scene-viewer${combatActive ? " scene-viewer--dimmed" : ""}`}
@@ -292,63 +295,27 @@ export default function PlayPage() {
                   playerPos={pos}
                   showOverlay={showOverlay}
                   overlayCentered
-                  floor={useRunStore.getState().currentFloor}
+                  floor={currentFloor}
                 />
               </div>
-                            {/* ACTIONS PAD — overlayed controls inside the console */}
+
               <div className="actions-pad">
-                <ThumbBar
-                  variant="overlay"
-                  onOpenJournal={() => openPanel("journal")}
-                  onOpenMap={() => openPanel("map")}
-                  onOpenCharacter={() => openPanel("character")}
-                  onLookAround={handleInspect}
-
-                  onMove={(d) => {
-                    if (defeatOverlay) { announce("You cannot move while your soul lingers here."); return; }
-                    if (!grid || !pos) return;
-                    const passable = new Set(["entry","exit","boss","combat","trap","loot","out","special","empty"]);
-                    const W = grid.width, H = grid.height;
-                    let nx = pos.x, ny = pos.y;
-                    if (d === "north") ny -= 1;
-                    if (d === "south") ny += 1;
-                    if (d === "west") nx -= 1;
-                    if (d === "east") nx += 1;
-                    if (nx < 0 || ny < 0 || nx >= W || ny >= H) { announce("Why are you running face first into that wall?"); return; }
-                    const t = grid.cells[ny * W + nx];
-                    if (!t || !passable.has(t.type)) { announce("Why are you running face first into that wall?"); return; }
-                    move(d);
-                  }}
-                  onInteract={handleInspect}
-                  onAttack={() => announce("Attack (stub)")}
-                  onSkill={() => announce("Skill (stub)")}
-                  onItem={() => announce("Item (stub)")}
-                  onDefend={() => announce("Defend (stub)")}
-                  onBack={handleBack}
-                  onAscend={async () => { await ascend?.(); window.scrollTo({ top: 0, behavior: "instant" as ScrollBehavior }); }}
-                  showAscend={showAscend}
-                  mode={mode}
-                  disabled={defeatOverlay}
-                />
+                <ControlPad />
               </div>
-              </div> {/* closes .console-frame__content */}
-              </div>   {/* closes .console-frame */}
+            </div>
+          </div>
 
+          <CombatOverlay active={combatActive} />
 
-
-
-
-
-            {/* COMBAT OVERLAY — sits above the scene when combat is active */}
-            <CombatOverlay active={combatActive} />
-        
-
-          {/* ------------------------------------------------------------
-             MOBILE TOGGLES — small floating buttons to open drawers
-             ------------------------------------------------------------ */}
           <div className="hide-desktop" style={{ position: "relative" }}>
             <div className="mobile-side-buttons">
-              <button data-drawer-toggle="character-drawer">Character</button>
+              <button
+                className="btn btn--ghost"
+                onClick={handleToggleDrawer("character")}
+                aria-label="Open character drawer"
+              >
+                Character
+              </button>
 
               <button
                 className="btn btn--ghost"
@@ -367,7 +334,6 @@ export default function PlayPage() {
             </div>
           </div>
         </section>
-
         {/* ============================================================
             RIGHT RAIL — Map + Journal (button opens drawer)
             ============================================================ */}
@@ -422,41 +388,11 @@ export default function PlayPage() {
         </div>
 
         {/* Combat actions bottom sheet (auto-opens in combat) */}
-        <SlideDrawer
-          id="combat-sheet"
-          side="bottom"
-          open={combatDrawerOpen}
-          onClose={handleCloseDrawer("combatActions")}
-          labelledBy="combat-sheet-title"
-        >
-          <CombatActionSheet />
-        </SlideDrawer>
+        
       </div>
     </PageSurface>
   );
 }
-
-/* =================================================================
-   UTILS
-   ================================================================= */
-
-function formatDropSource(source?: string | null): string | null {
-  if (!source) return null;
-  if (source.startsWith("boss:")) {
-    const bossId = source.split(":", 2)[1] ?? "boss";
-    return `Filed under boss dossier ${toTitle(bossId)}`;
-  }
-  if (source.startsWith("enemy:")) {
-    const enemyId = source.split(":", 2)[1] ?? "enemy";
-    return `Recovered from ${toTitle(enemyId)}.`;
-  }
-  return `Logged source: ${source}`;
-}
-
-function toTitle(str: string) {
-  return str.replace(/[-_]/g, " ").replace(/\b\w/g, (m) => m.toUpperCase());
-}
-
 /* =================================================================
    OVERLAYS & PANELS (local components)
    ================================================================= */
@@ -592,61 +528,6 @@ function PanelRow({ label, value }: { label: string; value: string }) {
   );
 }
 
-/** Bottom sheet used during combat for choosing actions. */
-function CombatActionSheet() {
-  const encounter = useCombatStore((state) => state.encounter);
-  const commitDecision = useCombatStore((state) => state.commitPlayerDecision);
-  const activeSide = useCombatStore((state) => state.getActiveSide());
-
-  if (!encounter) {
-    return (
-      <div className="menu-panel" aria-live="polite">
-        <div className="panel-title">Combat</div>
-        <p style={{ color: "var(--color-muted)", margin: 0 }}>No active encounter.</p>
-      </div>
-    );
-  }
-
-  const entities = Object.values(encounter.entities);
-  const player = entities.find((entity) => entity.faction === "player");
-  const enemies = entities.filter((entity) => entity.faction === "enemy" && entity.alive);
-  const targetId = enemies[0]?.id;
-  const canAct = !!player && !!targetId && activeSide === "player";
-  const actions = player?.actions ?? [];
-
-  return (
-    <div className="menu-panel" aria-live="polite">
-      <div className="panel-title" id="combat-sheet-title">
-        Combat Options
-      </div>
-      {actions.length === 0 ? (
-        <p style={{ color: "var(--color-muted)", margin: 0 }}>Awaiting new tactics...</p>
-      ) : (
-        <div style={{ display: "grid", gap: 8 }}>
-          {actions.map((action) => (
-            <button
-              key={action.contract.id}
-              className="btn btn--ghost"
-              disabled={!canAct}
-              onClick={() => {
-                if (!canAct || !targetId) return;
-                commitDecision({
-                  actionId: action.contract.id,
-                  targetIds: [targetId],
-                  boosterOutcome: "good",
-                });
-              }}
-            >
-              <strong>{action.contract.name}</strong>
-              <div style={{ fontSize: 12, opacity: 0.7 }}>{action.contract.category}</div>
-            </button>
-          ))}
-        </div>
-      )}
-    </div>
-  );
-}
-
 /** Final extraction panel shown when reaching the final exit. */
 function FinalExtract({ onExtract }: { onExtract: () => void }) {
   return (
@@ -690,7 +571,7 @@ function JournalPanel({ titleId }: { titleId?: string }) {
   const [expandedCombat, setExpandedCombat] = useState<string | null>(null);
 
   const sortedRunLog = useMemo(() => {
-    return [...(runLog ?? [])].sort((a, b) => a.t - b.t);
+    return [...runLog].sort((a, b) => a.t - b.t);
   }, [runLog]);
 
   const filteredRunLog = useMemo(() => {
@@ -699,8 +580,9 @@ function JournalPanel({ titleId }: { titleId?: string }) {
   }, [sortedRunLog, runFilter]);
 
   const combinedCombatLog = useMemo(() => {
-    const combined = [...(combatLog ?? []), ...(combatBuffer ?? [])];
-    return combined.sort((a, b) => a.t - b.t);
+    const combined = [...combatLog, ...combatBuffer];
+    combined.sort((a, b) => a.t - b.t);
+    return combined;
   }, [combatLog, combatBuffer]);
 
   const renderMeta = (floor?: number, location?: { x: number; y: number }, tag?: string) => {
