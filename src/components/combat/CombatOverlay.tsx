@@ -1,6 +1,6 @@
 ﻿"use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { useCombatStore } from "@/state/combatStore";
 import { useUIStore } from "@/store/uiStore";
 import type { CombatEntity, StatusInstance, TelemetryRecord } from "@/engine/combat/types";
@@ -8,8 +8,6 @@ import type { CombatEntity, StatusInstance, TelemetryRecord } from "@/engine/com
 import TurnStrip from "../console/HUD/TurnStrip";
 import CompactLog from "../console/HUD/CompactLog";
 import Floaters from "../console/HUD/Floaters";
-import EntityPanel, { type EntityStatusChip } from "../console/HUD/EntityPanel";
-
 import "./combat.css";
 
 const EMPTY_ORDER: string[] = [];
@@ -44,6 +42,8 @@ export default function CombatOverlay({ active = false, leaving }: CombatOverlay
   const bannerTimerRef = useRef<number | null>(null);
   const initiativeKeyRef = useRef<string | null>(null);
   const statCeilingRef = useRef<Map<string, StatSnapshot>>(new Map());
+  const overlayRef = useRef<HTMLDivElement | null>(null);
+  const hudRef = useRef<HTMLDivElement | null>(null);
 
   const getCeiling = useCallback(
     (entity: CombatEntity): StatSnapshot => {
@@ -191,64 +191,7 @@ export default function CombatOverlay({ active = false, leaving }: CombatOverlay
     return next.length ? next : EMPTY_LINES;
   }, [rows]);
 
-  const playerPanel = useMemo(() => {
-    if (!allies.length) return null;
-    const primary = allies.find((entry) => entry.entity.faction === "player") ?? allies[0];
-    if (!primary) return null;
-
-    const focus = typeof primary.entity.resources?.focus === "number" ? primary.entity.resources.focus : undefined;
-    const stamina =
-      typeof primary.entity.resources?.stamina === "number" ? primary.entity.resources.stamina : undefined;
-
-    return {
-      side: "left" as const,
-      name: primary.entity.name,
-      hp: primary.entity.stats.HP,
-      hpMax: primary.ceiling.hp,
-      mp: focus,
-      mpMax: typeof primary.ceiling.focus === "number" ? primary.ceiling.focus : focus,
-      sta: stamina,
-      staMax: typeof primary.ceiling.stamina === "number" ? primary.ceiling.stamina : stamina,
-      statuses: mapStatusesForPanel(primary.entity.statuses),
-      isKO: !primary.entity.alive,
-      regionLabel: "Player status",
-    };
-  }, [allies]);
-
-  const enemyPanel = useMemo(() => {
-    if (!enemies.length) return null;
-    const activeEntity = activeId ? entities?.[activeId] : undefined;
-    const activeEnemyEntry =
-      activeEntity?.faction === "enemy"
-        ? enemies.find((entry) => entry.entity.id === activeEntity.id)
-        : undefined;
-
-    const firstAlive = enemies.find((entry) => entry.entity.alive);
-    const target = activeEnemyEntry ?? firstAlive ?? enemies[0];
-    if (!target) return null;
-
-    const focus = typeof target.entity.resources?.focus === "number" ? target.entity.resources.focus : undefined;
-    const stamina =
-      typeof target.entity.resources?.stamina === "number" ? target.entity.resources.stamina : undefined;
-
-    return {
-      side: "right" as const,
-      name: target.entity.name,
-      hp: target.entity.stats.HP,
-      hpMax: target.ceiling.hp,
-      mp: focus,
-      mpMax: typeof target.ceiling.focus === "number" ? target.ceiling.focus : focus,
-      sta: stamina,
-      staMax: typeof target.ceiling.stamina === "number" ? target.ceiling.stamina : stamina,
-      statuses: mapStatusesForPanel(target.entity.statuses),
-      isKO: !target.entity.alive,
-      regionLabel: "Enemy status",
-    };
-  }, [activeId, enemies, entities]);
-
-  const hasStatsPanels = Boolean(playerPanel || enemyPanel);
-  const showStatsRail = (active || leaving) && hasStatsPanels;
-  const statsRailClassName = `stats-rail${active ? " stats-rail--visible" : ""}${leaving ? " stats-rail--leaving" : ""}`;
+  const combatActive = active || Boolean(leaving);
 
   const floaterTrigger = useMemo(() => {
     if (!rows.length) return undefined;
@@ -274,6 +217,85 @@ export default function CombatOverlay({ active = false, leaving }: CombatOverlay
     return undefined;
   }, [rows]);
 
+  useLayoutEffect(() => {
+    const overlayNode = overlayRef.current;
+    if (!overlayNode) return;
+
+    const combatHost =
+      (overlayNode.closest("[data-combat-host]") as HTMLElement | null) ??
+      (overlayNode.closest(".play-middle") as HTMLElement | null);
+    const combatRoot =
+      (combatHost?.closest("[data-combat-root]") as HTMLElement | null) ??
+      (overlayNode.closest(".play-root") as HTMLElement | null);
+    if (!combatHost) return;
+
+    let animationFrame = 0;
+
+    const setMetrics = () => {
+      if (animationFrame) window.cancelAnimationFrame(animationFrame);
+      animationFrame = window.requestAnimationFrame(() => {
+        const railHeight = hudRef.current?.offsetHeight ?? 0;
+        const padContainer = combatHost.querySelector(".actions-pad") as HTMLElement | null;
+        const controlPad = combatHost.querySelector(".control-pad") as HTMLElement | null;
+        const padHeight = Math.max(padContainer?.offsetHeight ?? 0, controlPad?.offsetHeight ?? 0);
+
+        overlayNode.style.setProperty("--combat-rail-height", `${railHeight}px`);
+        combatHost.style.setProperty("--combat-rail-height", `${railHeight}px`);
+        if (combatRoot) {
+          combatRoot.style.setProperty("--combat-rail-height", `${railHeight}px`);
+        }
+
+        overlayNode.style.setProperty("--controlpad-h", `${padHeight}px`);
+        combatHost.style.setProperty("--controlpad-h", `${padHeight}px`);
+        if (combatRoot) {
+          combatRoot.style.setProperty("--controlpad-h", `${padHeight}px`);
+        }
+      });
+    };
+
+    setMetrics();
+
+    if (typeof ResizeObserver === "undefined") {
+      return () => {
+        if (animationFrame) window.cancelAnimationFrame(animationFrame);
+        overlayNode.style.removeProperty("--combat-rail-height");
+        combatHost.style.removeProperty("--combat-rail-height");
+        if (combatRoot) {
+          combatRoot.style.removeProperty("--combat-rail-height");
+        }
+        overlayNode.style.removeProperty("--controlpad-h");
+        combatHost.style.removeProperty("--controlpad-h");
+        if (combatRoot) {
+          combatRoot.style.removeProperty("--controlpad-h");
+        }
+      };
+    }
+
+    const resizeObserver = new ResizeObserver(() => {
+      setMetrics();
+    });
+
+    resizeObserver.observe(combatHost);
+    if (hudRef.current) resizeObserver.observe(hudRef.current);
+    const padContainer = combatHost.querySelector(".actions-pad");
+    if (padContainer) resizeObserver.observe(padContainer);
+
+    return () => {
+      if (animationFrame) window.cancelAnimationFrame(animationFrame);
+      resizeObserver.disconnect();
+      overlayNode.style.removeProperty("--combat-rail-height");
+      combatHost.style.removeProperty("--combat-rail-height");
+      if (combatRoot) {
+        combatRoot.style.removeProperty("--combat-rail-height");
+      }
+      overlayNode.style.removeProperty("--controlpad-h");
+      combatHost.style.removeProperty("--controlpad-h");
+      if (combatRoot) {
+        combatRoot.style.removeProperty("--controlpad-h");
+      }
+    };
+  }, [combatActive]);
+
   useEffect(() => {
     if (!active || !lastResolution) return;
     const actorLabel = labelFor(lastResolution.actorId);
@@ -281,12 +303,16 @@ export default function CombatOverlay({ active = false, leaving }: CombatOverlay
     setAnnouncement(`${actorLabel} used ${actionId}.`);
   }, [active, lastResolution, labelFor]);
 
-  if (!active && !leaving) {
+  if (!combatActive) {
     return null;
   }
 
   return (
-    <div className={`combat-overlay ${leaving ? "combat-overlay--leaving" : ""}`}>
+    <div
+      ref={overlayRef}
+      className={`combat-overlay${leaving ? " combat-overlay--leaving" : ""}`}
+      data-active={combatActive ? "1" : undefined}
+    >
       <div className="visually-hidden" aria-live="polite" aria-atomic="true">
         {announcement}
       </div>
@@ -297,8 +323,8 @@ export default function CombatOverlay({ active = false, leaving }: CombatOverlay
         </div>
       ) : null}
 
-      <div className="combat-root">
-        <div className="combat-hud">
+      <div className="combat-rail" data-active={combatActive ? "1" : undefined}>
+        <div ref={hudRef} className="combat-hud">
           <div className="hud-card hud-left" id="hud-left">
             {allies.length ? (
               allies.map(({ entity, ceiling }) => (
@@ -318,14 +344,10 @@ export default function CombatOverlay({ active = false, leaving }: CombatOverlay
             )}
           </div>
         </div>
+      </div>
 
+      <div className="combat-root">
         <div className="combat-scene-overlay" id="scene-overlay">
-          {showStatsRail ? (
-            <div className={statsRailClassName}>
-              {playerPanel ? <EntityPanel {...playerPanel} /> : null}
-              {enemyPanel ? <EntityPanel {...enemyPanel} /> : null}
-            </div>
-          ) : null}
           <TurnStrip order={order} activeId={activeId} labelFor={labelFor} />
           <CompactLog lines={compactLines} />
           <Floaters trigger={floaterTrigger} />
@@ -403,7 +425,9 @@ function normalizeStatuses(statuses: StatusInstance[] | undefined) {
     .filter((status) => status.remaining !== 0)
     .slice(0, 4)
     .map((status) => {
-      const { displayLabel, fullLabel } = describeStatus(status);
+      const baseLabel = formatStatus(status.statusId);
+      const displayLabel = status.stacks > 1 ? `${baseLabel} ×${status.stacks}` : baseLabel;
+      const fullLabel = `${baseLabel}${status.stacks > 1 ? ` (${status.stacks} stacks)` : ""}`;
       return {
         key: `${status.statusId}:${status.id ?? ""}`,
         label: displayLabel,
@@ -415,24 +439,4 @@ function normalizeStatuses(statuses: StatusInstance[] | undefined) {
 function formatStatus(statusId: string) {
   const cleaned = statusId.replace(/[_:-]+/g, " ").trim();
   return cleaned.replace(/\b\w/g, (m) => m.toUpperCase());
-}
-
-function mapStatusesForPanel(statuses: StatusInstance[] | undefined): EntityStatusChip[] {
-  if (!statuses?.length) return [];
-  return statuses
-    .filter((status) => status.remaining !== 0)
-    .map((status) => {
-      const { displayLabel } = describeStatus(status);
-      return {
-        id: status.id ?? status.statusId,
-        label: displayLabel,
-      };
-    });
-}
-
-function describeStatus(status: StatusInstance) {
-  const baseLabel = formatStatus(status.statusId);
-  const displayLabel = status.stacks > 1 ? `${baseLabel} ×${status.stacks}` : baseLabel;
-  const fullLabel = `${baseLabel}${status.stacks > 1 ? ` (${status.stacks} stacks)` : ""}`;
-  return { displayLabel, fullLabel };
 }

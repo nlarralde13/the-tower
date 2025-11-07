@@ -2,6 +2,16 @@
 
 Date: 2025-11-06
 
+## Play UI & Drawer Refresh
+
+- Split the Character and Inventory drawers so each panel opens independently on the left rail, added matching close controls inside Character/Inventory/Journal components, and wired TopBar quick actions (Map/Character/Inventory/Journal) to scroll to the relevant panel sections. Files: `src/app/play/page.tsx`, `src/store/uiStore.ts`, `src/components/TopBar.tsx`.
+- Journal drawer selection is now responsive (bottom sheet on mobile, right rail on desktop) and every panel exposes a consistent header close button to mirror the Map panel UX.
+
+## Control Pad & Actions
+
+- Centered the control pad overlay on mobile, introduced a header row with compact “Inspect” and “Flee” buttons (with a timed confirmation popover), and reworked ThumbBar styles to accommodate the new layout on both mobile and desktop. Files: `src/app/play/play.mobile.css`, `src/components/ThumbBar.tsx`, `src/components/ThumbBar.module.css`.
+- Hooked the new actions into real behaviors: Inspect opens the journal drawer, and confirming Flee now ends the run via `runStore.endRun()` before routing back to `/`. File: `src/components/console/ControlPad/ExplorePad.tsx`.Date: 2025-11-06
+
 ## Combat HUD - Viewer Stats Rail
 
 - Added reusable `EntityPanel` component (`src/components/console/HUD/EntityPanel.tsx`) to present entity name, clamped HP/MP/STA meters, KO badge, and capped status chips with overflow indicator.
@@ -108,3 +118,4 @@ Date: 2025-11-01
 ### Misc
 - Updated /climb button styles to shared .btn variants.
 - General copy edits and small UX consistency tweaks.
+

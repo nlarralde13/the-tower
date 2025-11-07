@@ -1,18 +1,18 @@
 "use client";
 
-import { useCallback, useRef } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import styles from "./ThumbBar.module.css";
 
 type Direction = "north" | "south" | "west" | "east";
 
 type ThumbBarProps = {
   onMove: (dir: Direction) => void;
-  onInteract?: () => void;
+  onInspect?: () => void;
   onAttack?: () => void;
   onSkill?: () => void;
   onItem?: () => void;
   onDefend?: () => void;
-  onBack?: () => void;
+  onFlee?: () => void;
   onAscend?: () => void;
   onOpenJournal?: () => void;
   onOpenMap?: () => void;
@@ -28,12 +28,12 @@ type ThumbBarProps = {
 
 export default function ThumbBar({
   onMove,
-  onInteract,
+  onInspect,
   onAttack,
   onSkill,
   onItem,
   onDefend,
-  onBack,
+  onFlee,
   onAscend,
   showAscend,
   onOpenJournal,
@@ -45,8 +45,10 @@ export default function ThumbBar({
   variant = "fixed",
   className,
   utilityActions,
-
 }: ThumbBarProps) {
+  const [confirmingFlee, setConfirmingFlee] = useState(false);
+  const fleeTimerRef = useRef<number | null>(null);
+
   const handleMove = useCallback(
     (dir: Direction) => {
       if (disabled) return;
@@ -60,10 +62,10 @@ export default function ThumbBar({
     onAscend?.();
   }, [disabled, onAscend]);
 
-  const handleInteract = useCallback(() => {
+  const handleInspect = useCallback(() => {
     if (disabled) return;
-    onInteract?.();
-  }, [disabled, onInteract]);
+    onInspect?.();
+  }, [disabled, onInspect]);
 
   const handleAttack = useCallback(() => {
     if (disabled) return;
@@ -85,10 +87,42 @@ export default function ThumbBar({
     onDefend?.();
   }, [disabled, onDefend]);
 
-  const handleBack = useCallback(() => {
-    if (disabled) return;
-    onBack?.();
-  }, [disabled, onBack]);
+  const resetFleeConfirm = useCallback(() => {
+    if (fleeTimerRef.current) {
+      window.clearTimeout(fleeTimerRef.current);
+      fleeTimerRef.current = null;
+    }
+    setConfirmingFlee(false);
+  }, []);
+
+  const executeFlee = useCallback(() => {
+    if (disabled || !onFlee) return;
+    resetFleeConfirm();
+    onFlee();
+  }, [disabled, onFlee, resetFleeConfirm]);
+
+  const handleFleeRequest = useCallback(() => {
+    if (disabled || !onFlee) return;
+    if (!confirmingFlee) {
+      setConfirmingFlee(true);
+      if (fleeTimerRef.current) window.clearTimeout(fleeTimerRef.current);
+      fleeTimerRef.current = window.setTimeout(() => {
+        setConfirmingFlee(false);
+        fleeTimerRef.current = null;
+      }, 3500);
+      return;
+    }
+  }, [disabled, onFlee, confirmingFlee]);
+
+  useEffect(() => {
+    if (!confirmingFlee) return () => {};
+    return () => {
+      if (fleeTimerRef.current) {
+        window.clearTimeout(fleeTimerRef.current);
+        fleeTimerRef.current = null;
+      }
+    };
+  }, [confirmingFlee]);
 
   const handleOpenJournal = useCallback(() => {
     if (disabled) return;
@@ -135,6 +169,37 @@ export default function ThumbBar({
 
 
       <div className={styles.inner}>
+        <div className={styles.headerActions}>
+          <MiniActionButton
+            label="Inspect"
+            ariaLabel="Inspect surroundings"
+            onClick={handleInspect}
+            disabled={disabled || !onInspect}
+          />
+          <div className={styles.fleeWrapper}>
+            <MiniActionButton
+              label="Flee"
+              ariaLabel="Flee the encounter"
+              onClick={handleFleeRequest}
+              disabled={disabled || !onFlee}
+              danger
+            />
+            {confirmingFlee && (
+              <div className={styles.fleeConfirm} role="status" aria-live="polite">
+                <span className={styles.fleeConfirmLabel}>End run and return to town?</span>
+                <div className={styles.fleeConfirmActions}>
+                  <button type="button" onClick={executeFlee} className={styles.confirmButton} disabled={disabled || !onFlee}>
+                    Yes
+                  </button>
+                  <button type="button" onClick={resetFleeConfirm} className={styles.cancelButton}>
+                    No
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+
         <div className={styles.cluster}>
           {showAscend && (
             <ActionButton
@@ -165,18 +230,7 @@ export default function ThumbBar({
               <ActionButton label="Item" ariaLabel="Use item" onClick={handleItem} disabled={disabled} onLongPress={handleItem} />
               <ActionButton label="Defend" ariaLabel="Defend" onClick={handleDefend} disabled={disabled} onLongPress={handleDefend} />
             </div>
-          ) : (
-            <div className={styles.interact}>
-              <ActionButton
-                label="Interact"
-                ariaLabel="Interact with the room"
-                onClick={handleInteract}
-                disabled={disabled}
-                onLongPress={handleInteract}
-              />
-            </div>
-          )}
-          <ActionButton label="Back" ariaLabel="Go back" onClick={handleBack} disabled={disabled} />
+          ) : null}
         </div>
       </div>
     </div>
@@ -244,6 +298,35 @@ function ActionButton({
       disabled={disabled}
     >
       <span className={styles.labelPrimary}>{label}</span>
+    </button>
+  );
+}
+
+function MiniActionButton({
+  label,
+  ariaLabel,
+  onClick,
+  disabled,
+  danger,
+}: {
+  label: string;
+  ariaLabel: string;
+  onClick?: () => void;
+  disabled?: boolean;
+  danger?: boolean;
+}) {
+  return (
+    <button
+      type="button"
+      className={`${styles.miniButton} ${danger ? styles.miniButtonDanger : ""}`}
+      aria-label={ariaLabel}
+      onClick={() => {
+        if (disabled) return;
+        onClick?.();
+      }}
+      disabled={disabled}
+    >
+      {label}
     </button>
   );
 }

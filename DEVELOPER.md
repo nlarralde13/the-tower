@@ -84,6 +84,8 @@ Concise architecture, routes, paths, and design notes for The Tower.
   - Right (desktop): map (visited vs unknown) plus journal; the combat overlay sits inside the viewer to keep HUD separate from the control pad.
   - Mobile: inventory/map slide-in drawers; dev overlay toggled by `?overlay=1`.
 - Invalid move quip: "Why are you running face first into that wall?"
+- Drawer controls: Character and Inventory now have independent slide drawers (left rail) with internal close buttons. Journal continues to choose bottom or right drawer based on viewport width, and TopBar quick actions call `useUIStore().open(panel)` to scroll to `#character-panel` or `#inventory-panel` anchors.
+- Control pad layout: `ThumbBar` renders inside `.actions-pad` and now includes compact Inspect/Flee buttons in the upper-right corner. Inspect opens the journal drawer; Flee shows a timed confirmation popover and, when accepted, invokes `runStore.endRun()` then `router.push("/")` (see `src/components/console/ControlPad/ExplorePad.tsx`). The mobile overlay is centered via CSS to keep the pad aligned with the scene.
 
 **Flavor System**
 - Per-room flavor text modules: `src/game/flavor/*.ts` with aggregator `src/game/flavor.ts`.

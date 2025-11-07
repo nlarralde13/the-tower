@@ -52,6 +52,7 @@ export default function SceneViewer({
       style={{
         position: "relative",
         width: "100%",
+        height: "100%",
         flex: 1,
         minHeight: 220,
         display: "flex",
@@ -78,11 +79,12 @@ export default function SceneViewer({
             }
           }}
           style={{
-            maxWidth: "100%",
-            maxHeight: "100%",
-            objectFit: "contain",
+            width: "100%",
+            height: "100%",
+            objectFit: "cover",
             transition: allowMotion ? "opacity 180ms ease-in" : undefined,
             opacity: 1,
+            display: "block",
           }}
         />
       ) : (

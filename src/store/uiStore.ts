@@ -5,7 +5,7 @@ import { devtools, persist } from "zustand/middleware";
 export type UIMode = "explore" | "combat" | "extract" | "summary";
 
 /** Drawer panels you already use across the app */
-export type PanelName = "character" | "map" | "journal";
+export type PanelName = "character" | "inventory" | "map" | "journal";
 
 type OpenPanels = Record<PanelName, boolean>;
 
@@ -56,6 +56,7 @@ interface UIState {
 
 const initialPanels: OpenPanels = {
   character: false,
+  inventory: false,
   map: false,
   journal: false,
 };

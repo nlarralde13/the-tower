@@ -23,11 +23,13 @@ interface CombatStoreState {
   beginEncounter: (
     enemies: Array<string | EnemyContract>,
     state: StartEncounterState,
-    seed: string
+    seed: string,
+    options?: { forceFirst?: "player" | "enemy" }
   ) => void;
   commitPlayerDecision: (decision: PlayerDecision) => void;
   advanceTurn: () => void;
   getActiveSide: () => "player" | "enemy";
+  forceEnemyAdvance: (delayMs?: number) => void;
   endEncounter: () => void;
 }
 
@@ -41,7 +43,7 @@ export const useCombatStore = create<CombatStoreState>((set, get) => {
     }
   };
 
-  const scheduleEnemyTurn = () => {
+  const scheduleEnemyTurn = (delay: number = ENEMY_TURN_DELAY_MS) => {
     clearEnemyTimer();
     const state = get();
     if (!state.encounter || state.activeSide !== "enemy") return;
@@ -59,7 +61,39 @@ export const useCombatStore = create<CombatStoreState>((set, get) => {
         return;
       }
       latest.advanceTurn();
-    }, ENEMY_TURN_DELAY_MS);
+    }, delay);
+  };
+
+  const rotateOrderToFaction = (encounter: Encounter, faction: "player" | "enemy"): Encounter => {
+    const targetId =
+      faction === "player"
+        ? encounter.order.find((id) => encounter.entities[id]?.faction === "player")
+        : encounter.order.find((id) => {
+            const entity = encounter.entities[id];
+            return entity?.faction === "enemy" && entity.alive;
+          });
+    if (!targetId) {
+      return {
+        ...encounter,
+        initiative: { ...encounter.initiative, first: faction },
+      };
+    }
+    if (encounter.order[0] === targetId) {
+      return {
+        ...encounter,
+        activeIndex: 0,
+        initiative: { ...encounter.initiative, first: faction },
+      };
+    }
+    const index = encounter.order.indexOf(targetId);
+    if (index < 0) return encounter;
+    const newOrder = [...encounter.order.slice(index), ...encounter.order.slice(0, index)];
+    return {
+      ...encounter,
+      order: newOrder,
+      activeIndex: 0,
+      initiative: { ...encounter.initiative, first: faction },
+    };
   };
 
   return {
@@ -68,8 +102,11 @@ export const useCombatStore = create<CombatStoreState>((set, get) => {
     lastResolution: null,
     initiative: null,
     activeSide: "player",
-    beginEncounter: (enemies, state, seed) => {
-      const encounter = startEncounter(state, enemies, seed);
+    beginEncounter: (enemies, state, seed, options) => {
+      let encounter = startEncounter(state, enemies, seed);
+      if (options?.forceFirst) {
+        encounter = rotateOrderToFaction(encounter, options.forceFirst);
+      }
       const nextSide = encounter.initiative.first;
       set({
         encounter,
@@ -131,6 +168,9 @@ export const useCombatStore = create<CombatStoreState>((set, get) => {
       }
     },
     getActiveSide: () => get().activeSide,
+    forceEnemyAdvance: (delayMs = ENEMY_TURN_DELAY_MS) => {
+      scheduleEnemyTurn(delayMs);
+    },
     endEncounter: () => {
       clearEnemyTimer();
       set({

@@ -1,26 +1,13 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+// Renders just the combat control pad. Reads directly from the run store.
+// Avoids unstable selector identities and avoids creating new function refs.
+
+import { useMemo } from "react";
 import CombatConsole from "./CombatConsole";
+import { useRunStore } from "@/store/runStore";
 
-/**
- * Wire these selectors to your store:
- * - encounter: the active encounter object (must have stable .id while combat lasts)
- * - activeCombat: boolean flag indicating combat is running
- * - telemetry: array/queue that includes an "initiative" entry at combat start
- * - markTelemetryRead: advance your telemetry cursor when we've consumed items
- * - completeEncounter: finalize the encounter (victory/defeat/escape)
- *
- * Replace the import below with your actual store path.
- */
-// import { useRunStore } from "@/stores/runStore";
-
-type TelemetryItem = {
-  type: string;
-  payload?: any;
-};
-
-type Entity = {
+type EntityVM = {
   id: string;
   name: string;
   isPlayer?: boolean;
@@ -33,191 +20,100 @@ type Entity = {
   status?: string[];
 };
 
-type EncounterVM = {
-  id: string;
-  order: string[];                 // initiative order (entity ids)
-  turnOwnerId: string;             // whose turn is it now
-  entities: Record<string, Entity>;
-  enemies: string[];               // ids
-  party: string[];                 // ids
-};
+const noopAct = (() => {}) as (a: unknown) => void;
 
 export default function CombatRoot() {
-  /** -------------------- Store wiring (replace with your own) -------------------- */
-  // const {
-  //   encounter,          // EncounterVM or similar
-  //   activeCombat,       // boolean
-  //   telemetry,          // TelemetryItem[]
-  //   markTelemetryRead,  // (count: number) => void
-  //   completeEncounter,  // (result: "victory"|"defeat"|"escape") => void
-  // } = useRunStore(s => ({
-  //   encounter: s.encounter,
-  //   activeCombat: s.activeCombat,
-  //   telemetry: s.telemetryUnread, // or however you expose unread entries
-  //   markTelemetryRead: s.markTelemetryRead,
-  //   completeEncounter: s.completeEncounter,
-  // }));
+  // Read each field separately so React/Zustand can compare by identity.
+  const mode = useRunStore((s) => s.mode);
+  const encounter = useRunStore((s) => s.activeCombat as any);
+  const onActSel = useRunStore((s: any) => s.onAct || s.playerAct || s.enqueuePlayerAction || s.queueAction || s.combatAct);
+  const lastResolution = useRunStore((s: any) => s.lastResolution);
 
-  // Temporary no-op stand-ins so this file compiles if you paste before wiring:
-  const encounter = useMemo<EncounterVM | null>(() => null, []);
-  const activeCombat = true;
-  const telemetry: TelemetryItem[] = [];
-  const markTelemetryRead = (_n: number) => {};
-  const completeEncounter = (_r: "victory" | "defeat" | "escape") => {};
+  // Stable function reference (do not create a new one every render)
+  const act = onActSel || noopAct;
 
-  /** -------------------- Local state & refs -------------------- */
-  const [bannerLine, setBannerLine] = useState<string | null>(null);
-  const [announcement, setAnnouncement] = useState<string>(""); // aria-live
+  const inCombat = mode === "combat" && !!encounter;
+  if (!inCombat) return null;
 
-  // Disable inputs while the initiative banner is visible
-  const inputsDisabled = bannerLine !== null;
+  const vm = useMemo(() => {
+    const enc = encounter || {};
+    const entities: Record<string, EntityVM> = {};
+    const raw = enc.entities ?? {};
 
-  // Guard completion double-fire
-  const completionRef = useRef<string | null>(null);
+    for (const [id, e] of Object.entries<any>(raw)) {
+      const hp = Number(e?.stats?.HP ?? 0);
+      const hpMax = Number(e?.stats?.HPMax ?? e?.stats?.HP ?? 1) || 1;
+      const focus = e?.resources?.focus;
+      const stamina = e?.resources?.stamina;
 
-  // Timer for initiative banner
-  const bannerTimerRef = useRef<number | null>(null);
-
-  // Last resolution (optional feed from your engine; useful for compact log / floaters)
-  const [lastResolution, setLastResolution] = useState<
-    { text: string; targetId?: string; crit?: boolean; dmg?: number } | undefined
-  >(undefined);
-
-  /** -------------------- Body flag to hide room flavor during combat -------------------- */
-  useEffect(() => {
-    document.body.dataset.combat = "1";
-    return () => {
-      delete document.body.dataset.combat;
-    };
-  }, []);
-
-  /** -------------------- Initiative banner from telemetry -------------------- */
-  useEffect(() => {
-    if (!activeCombat || !encounter?.id) return;
-
-    // Find first unread initiative item (shape is up to your engine)
-    const idx = telemetry.findIndex(t => t.type === "initiative");
-    if (idx === -1) return;
-
-    const item = telemetry[idx];
-    // Example payload we’ll try to read; adjust if yours differs:
-    // payload = { first: "enemy"|"player", playerRoll: number, enemyRoll: number, who: string }
-    const p = item.payload ?? {};
-    const who = p.who ?? (p.first === "player" ? "You" : "Enemy");
-    const pr = Number(p.playerRoll);
-    const er = Number(p.enemyRoll);
-
-    const line =
-      isFinite(pr) && isFinite(er)
-        ? `${who} take the initiative (${isNaN(pr) ? "?" : pr} vs ${isNaN(er) ? "?" : er}).`
-        : `${who} take the initiative.`;
-
-    setBannerLine(line);
-    setAnnouncement(line);
-
-    // consume the initiative item (and anything before it)
-    markTelemetryRead(idx + 1);
-
-    // banner visible ~1.5s, then clear
-    if (bannerTimerRef.current) window.clearTimeout(bannerTimerRef.current);
-    bannerTimerRef.current = window.setTimeout(() => {
-      setBannerLine(null);
-      bannerTimerRef.current = null;
-    }, 1500);
-
-    return () => {
-      if (bannerTimerRef.current) {
-        window.clearTimeout(bannerTimerRef.current);
-        bannerTimerRef.current = null;
-      }
-    };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [activeCombat, encounter?.id, telemetry]);
-
-  /** -------------------- Completion guard (victory / defeat / escape) -------------------- */
-  useEffect(() => {
-    if (!activeCombat || !encounter?.id) {
-      completionRef.current = null;
-      return;
+      entities[id] = {
+        id,
+        name: String(e?.name ?? id),
+        isPlayer: e?.faction === "player",
+        hp,
+        hpMax,
+        mp: typeof focus === "number" ? focus : undefined,
+        mpMax: typeof focus === "number" ? focus : undefined,
+        st: typeof stamina === "number" ? stamina : undefined,
+        stMax: typeof stamina === "number" ? stamina : undefined,
+        status: Array.isArray(e?.statuses)
+          ? e.statuses.map((s: any) => s?.statusId).filter(Boolean)
+          : [],
+      };
     }
 
-    // Derive basic completion conditions from the encounter VM
-    const enemiesAlive =
-      encounter.enemies.some(id => (encounter.entities[id]?.hp ?? 0) > 0);
-    const partyAlive =
-      encounter.party.some(id => (encounter.entities[id]?.hp ?? 0) > 0);
+    const party = Array.isArray(enc.party)
+      ? enc.party
+      : Object.keys(entities).filter((id) => entities[id].isPlayer);
+    const enemies = Array.isArray(enc.enemies)
+      ? enc.enemies
+      : Object.keys(entities).filter((id) => !entities[id].isPlayer);
 
-    // Don’t fire more than once per encounter id
-    if (!enemiesAlive && partyAlive && completionRef.current !== encounter.id) {
-      completionRef.current = encounter.id;
-      completeEncounter("victory");
-    } else if (!partyAlive && completionRef.current !== encounter.id) {
-      completionRef.current = encounter.id;
-      completeEncounter("defeat");
-    }
-  }, [activeCombat, encounter, completeEncounter]);
+    const order =
+      Array.isArray(enc.order) && enc.order.length ? enc.order : [...party, ...enemies];
 
-  /** -------------------- Layout -------------------- */
+    const turnOwnerId =
+      Array.isArray(enc.order) && enc.order.length
+        ? String(enc.order[enc.activeIndex ?? 0] ?? "")
+        : "";
+
+    return {
+      id: String(enc.id ?? "encounter"),
+      order,
+      turnOwnerId,
+      entities,
+      enemies,
+      party,
+    };
+  }, [encounter]);
+
   return (
-    <>
-      {/* SR-only live region for initiative or other combat announcements */}
-      <div aria-live="polite" className="visually-hidden">
-        {announcement}
-      </div>
-
-      {/* Initiative banner (brief lockout) */}
-      {bannerLine && (
-        <div
-          className="menu-panel"
-          style={{
-            position: "absolute",
-            left: "50%",
-            top: "10px",
-            transform: "translateX(-50%)",
-            zIndex: 2,
-            padding: "10px 14px",
-            textAlign: "center",
-          }}
-          role="status"
-          aria-live="polite"
-        >
-          {bannerLine}
-        </div>
-      )}
-
-      {/* TOP HUD: player (left) / enemies (right) */}
-      <div className="combat-hud">
-        <div className="hud-card hud-left" id="hud-left" />
-        <div className="hud-card hud-right" id="hud-right" />
-      </div>
-
-      {/* SCENE OVERLAY: turn order strip, compact log, damage/crit floaters */}
-      <div className="combat-scene-overlay" id="scene-overlay" />
-
-      {/* CONTROLLER / MENUS (JRPG pad) */}
-      <div className="combat-pad" aria-disabled={inputsDisabled}>
+    <div className="control-pad" data-mode="combat">
+      <div className="control-pad__surface">
         <CombatConsole
-          // Feed your VM, skills, items, actions here (these are placeholders)
-          vm={
-            (encounter as unknown as EncounterVM) || {
-              id: "pending",
-              order: [],
-              turnOwnerId: "",
-              entities: {},
-              enemies: [],
-              party: [],
-            }
-          }
+          vm={vm}
           skills={[]}
           items={[]}
-          onAct={() => {}}
-          lastResolution={lastResolution}
-          // new prop you should handle in CombatConsole to disable buttons
-          // during the initiative banner:
-          // @ts-ignore optional until you add it on the console
-          inputsDisabled={inputsDisabled}
+          onAct={(action) => act(action)}
+          lastResolution={
+            lastResolution
+              ? {
+                  text: String(lastResolution?.text ?? ""),
+                  targetId:
+                    lastResolution?.targetId ??
+                    (Array.isArray(lastResolution?.targetIds)
+                      ? lastResolution?.targetIds?.[0]
+                      : undefined),
+                  crit: Boolean(lastResolution?.crit),
+                  dmg:
+                    typeof lastResolution?.dmg === "number"
+                      ? lastResolution?.dmg
+                      : undefined,
+                }
+              : undefined
+          }
         />
       </div>
-    </>
+    </div>
   );
 }

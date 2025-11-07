@@ -40,6 +40,70 @@
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: clamp(12px, 2vw, 24px);
+  position: relative;
+  padding-top: 64px;
+  justify-content: center;
+}
+
+.headerActions {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  align-items: center;
+}
+
+.fleeWrapper {
+  position: relative;
+  margin-left: auto;
+}
+
+.fleeConfirm {
+  position: absolute;
+  top: calc(100% + 6px);
+  right: -12px;
+  min-width: 170px;
+  padding: 10px 12px;
+  border-radius: 12px;
+  border: 1px solid rgba(255, 99, 132, 0.4);
+  background: rgba(14, 8, 18, 0.95);
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.35);
+  z-index: 5;
+}
+
+.fleeConfirmLabel {
+  font-size: 0.75rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: rgba(255, 255, 255, 0.8);
+}
+
+.fleeConfirmActions {
+  display: flex;
+  gap: 8px;
+  margin-top: 8px;
+}
+
+.confirmButton,
+.cancelButton {
+  flex: 1;
+  min-height: 32px;
+  border-radius: 999px;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  background: rgba(255, 255, 255, 0.08);
+  color: inherit;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  font-size: 0.7rem;
+}
+
+.confirmButton {
+  border-color: rgba(255, 99, 132, 0.6);
+  background: rgba(255, 99, 132, 0.15);
 }
 
 .cluster {
@@ -68,11 +132,6 @@
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 10px;
-}
-
-.interact {
-  display: flex;
-  justify-content: flex-end;
 }
 
 .button {
@@ -110,9 +169,28 @@
   letter-spacing: 0.12em;
 }
 
+.miniButton {
+  border-radius: 999px;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  background: rgba(255, 255, 255, 0.12);
+  color: #f6f3ea;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  min-height: 36px;
+  padding: 6px 14px;
+  font-size: 0.7rem;
+}
+
+.miniButtonDanger {
+  border-color: rgba(255, 99, 132, 0.6);
+  background: rgba(255, 99, 132, 0.18);
+}
+
 @media (max-width: 680px) {
   .inner {
     grid-template-columns: 1fr;
+    padding-top: 86px;
   }
 
   .cluster {
@@ -121,5 +199,15 @@
 
   .cluster:first-of-type {
     order: 1;
+  }
+
+  .headerActions {
+    position: absolute;
+    left: 0;
+    right: 0;
+    transform: none;
+    flex-wrap: wrap;
+    justify-content: space-between;
+    row-gap: 8px;
   }
 }

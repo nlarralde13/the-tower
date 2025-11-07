@@ -1,3 +1,4 @@
+
 ﻿"use client";
 
 /**
@@ -14,10 +15,9 @@
 import "./play.desktop.css";
 import "./play.mobile.css";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import PageSurface from "@/components/PageSurface";
 import SceneViewer from "@/components/SceneViewer";
-import CombatOverlay from "@/components/combat/CombatOverlay";
 import CompactMeterGroup, { type GaugeValue } from "@/components/hud/CompactMeters";
 import SlideDrawer from "@/components/drawers/SlideDrawer";
 import { useUIStore } from "@/store/uiStore";
@@ -29,6 +29,9 @@ import { getEnemyDefinition } from "@/content/index";
 import { useRouter, useSearchParams } from "next/navigation";
 import { playMusic } from "@/utils/audioManager";
 import ControlPad from "@/components/console/ControlPad";
+import { DefeatOverlay } from "@/components/run/DefeatOverlay";
+
+const PASSABLE_ROOM_TYPES = new Set(["entry", "exit", "boss", "combat", "trap", "loot", "out", "special", "empty"]);
 
 /* =================================================================
    PAGE COMPONENT
@@ -63,6 +66,10 @@ export default function PlayPage() {
   const mode = useRunStore((s) => s.mode); // "explore" | "combat"
   const activeCombat = useRunStore((s) => s.activeCombat);
   const defeatOverlay = useRunStore((s) => s.defeatOverlay);
+  const combatSession = useRunStore((s) => s.combatSession);
+  const engageCombat = useRunStore((s) => s.engageCombat);
+  const attemptCombatFlee = useRunStore((s) => s.attemptCombatFlee);
+  const resolveCombatExit = useRunStore((s) => s.resolveCombatExit);
 
   //Run+UI store updates
   const runMode = useRunStore((s) => s.mode); // existing: "explore" | "combat"
@@ -72,6 +79,7 @@ export default function PlayPage() {
    * UI STORE — drawers & panels
    * -------------------------------------------------------------- */
   const characterOpen = useUIStore((state) => state.openPanels.character);
+  const inventoryOpen = useUIStore((state) => state.openPanels.inventory);
   const mapOpen = useUIStore((state) => state.openPanels.map);
   const journalOpen = useUIStore((state) => state.openPanels.journal);
   const togglePanel = useUIStore((state) => state.toggle);
@@ -86,6 +94,16 @@ export default function PlayPage() {
   const { trigger: triggerHaptic } = useHaptics();
   const [actionMsg, setActionMsg] = useState<string>("");
   const liveRef = useRef<HTMLDivElement | null>(null);
+  const [isDesktop, setIsDesktop] = useState(false);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const media = window.matchMedia("(min-width: 1024px)");
+    const update = () => setIsDesktop(media.matches);
+    update();
+    media.addEventListener("change", update);
+    return () => media.removeEventListener("change", update);
+  }, []);
 
   /* --------------------------------------------------------------
    * Ambient audio (looped music)
@@ -116,6 +134,11 @@ export default function PlayPage() {
     if (!runId) router.replace("/climb");
   }, [runId, router]);
 
+  // When combat starts, move to the dedicated combat surface
+  useEffect(() => {
+    if (mode === "combat" && combatSession.status === "ready") router.replace("/play/combat");
+  }, [mode, combatSession.status, router]);
+
   /* --------------------------------------------------------------
    * Derived room state: current type, caption / viewer text
    * -------------------------------------------------------------- */
@@ -130,7 +153,7 @@ export default function PlayPage() {
     // Exploration caption: flavor + exits based on passable tiles
     if (!currentType || !grid || !pos) return undefined;
     const dirs: string[] = [];
-    const passable = new Set(["entry", "exit", "boss", "combat", "trap", "loot", "out", "special", "empty"]);
+    const passable = PASSABLE_ROOM_TYPES;
     const W = grid.width, H = grid.height;
     const can = (x: number, y: number) =>
       x >= 0 && y >= 0 && x < W && y < H && passable.has(grid.cells[y * W + x].type);
@@ -156,18 +179,45 @@ export default function PlayPage() {
   // Viewer caption priority:
   //   combat > cleared-room line > exploration flavor
   const viewerCaption = useMemo(() => {
+    if (combatSession.status === "prompt") return "You have entered a combat room.";
+    if (combatSession.status === "loading") return "Preparing the encounter...";
+    if (combatSession.status === "resolving" && combatSession.outcome === "victory") {
+      return "Combat resolved. Choose your exit.";
+    }
     if (mode === "combat") return combatCaption;
     if (currentKey && completedRooms?.[currentKey]) {
       const base = caption ?? "";
       return `${base} ${clearedRoomMessage}`.trim();
     }
     return caption;
-  }, [mode, combatCaption, caption, currentKey, completedRooms]);
+  }, [combatSession.status, combatSession.outcome, mode, combatCaption, caption, currentKey, completedRooms]);
+
+  const exitOptions = useMemo(() => {
+    if (!grid || !pos) return [];
+    const W = grid.width;
+    const H = grid.height;
+    const probes: Array<{ dir: "north" | "south" | "east" | "west"; x: number; y: number }> = [
+      { dir: "north", x: pos.x, y: pos.y - 1 },
+      { dir: "south", x: pos.x, y: pos.y + 1 },
+      { dir: "west", x: pos.x - 1, y: pos.y },
+      { dir: "east", x: pos.x + 1, y: pos.y },
+    ];
+    return probes.map((option) => {
+      const inBounds = option.x >= 0 && option.y >= 0 && option.x < W && option.y < H;
+      const cell = inBounds ? grid.cells[option.y * W + option.x] : null;
+      const available = Boolean(inBounds && cell && PASSABLE_ROOM_TYPES.has(cell.type));
+      return { ...option, available };
+    });
+  }, [grid, pos]);
+
+  const showPrompt = combatSession.status === "prompt" && !defeatOverlay;
+  const showLoading = combatSession.status === "loading" && !defeatOverlay;
+  const showExitPicker = combatSession.status === "resolving" && combatSession.outcome === "victory" && !defeatOverlay;
 
   /* --------------------------------------------------------------
    * Mode & meters
    * -------------------------------------------------------------- */
-  const combatActive = mode === "combat";
+  const combatActive = mode === "combat" && combatSession.status === "ready";
 
   // Temporary HUD meters — wire to real player stats later
   const heroMeters = useMemo<GaugeValue[]>(
@@ -185,20 +235,23 @@ export default function PlayPage() {
   /* --------------------------------------------------------------
    * Helpers — announce (aria-live), inspect, end run, back
    * -------------------------------------------------------------- */
-  function announce(msg: string) {
-    setActionMsg(msg);
-    // Force SR re-read by briefly clearing then setting text content
-    requestAnimationFrame(() => {
-      if (liveRef.current) {
-        (liveRef.current as HTMLDivElement).textContent = "";
-        (liveRef.current as HTMLDivElement).textContent = msg;
-      }
-    });
-  }
+  const announce = useCallback(
+    (msg: string) => {
+      setActionMsg(msg);
+      // Force SR re-read by briefly clearing then setting text content
+      requestAnimationFrame(() => {
+        if (liveRef.current) {
+          (liveRef.current as HTMLDivElement).textContent = "";
+          (liveRef.current as HTMLDivElement).textContent = msg;
+        }
+      });
+    },
+    [liveRef]
+  );
 
   useEffect(() => {
     if (defeatOverlay) announce("You have been defeated. A piece of your soul lingers.");
-  }, [defeatOverlay]);
+  }, [defeatOverlay, announce]);
 
   const handleInspect = () => {
     if (defeatOverlay) {
@@ -218,6 +271,29 @@ export default function PlayPage() {
     router.push("/");
   };
 
+  const handleEngage = useCallback(() => {
+    void engageCombat();
+  }, [engageCombat]);
+
+  const handleAttemptFlee = useCallback(async () => {
+    const result = await attemptCombatFlee();
+    if (result === "unavailable") return;
+    if (result === "escaped") {
+      announce("You slam the door and escape!");
+      triggerHaptic("attack_hit");
+    } else if (result === "failed") {
+      announce("Escape failed! Prepare to fight.");
+      triggerHaptic("attack_taken");
+    }
+  }, [attemptCombatFlee, announce, triggerHaptic]);
+
+  const handleExitChoice = useCallback(
+    (dir: "north" | "south" | "east" | "west") => {
+      resolveCombatExit(dir);
+    },
+    [resolveCombatExit]
+  );
+
   // Haptics + announcer when mode flips
   const prevModeRef = useRef(mode);
   useEffect(() => {
@@ -231,7 +307,17 @@ export default function PlayPage() {
       }
       prevModeRef.current = mode;
     }
-  }, [mode, triggerHaptic]);
+  }, [mode, triggerHaptic, announce]);
+
+  useEffect(() => {
+    if (combatSession.status === "prompt") {
+      announce("You have entered a combat room. Engage or attempt to flee.");
+    } else if (combatSession.status === "loading") {
+      announce("Preparing the encounter.");
+    } else if (combatSession.status === "resolving" && combatSession.outcome === "victory") {
+      announce("Combat resolved. Choose your exit.");
+    }
+  }, [combatSession.status, combatSession.outcome, announce]);
 
   function handleBack() {
     if (confirm("Leave the current run and return to the climb?")) {
@@ -254,7 +340,7 @@ export default function PlayPage() {
       {/* ============================================================
           MAIN GRID — left rail / middle console / right rail
           ============================================================ */}
-      <div className="play-root">
+      <div className="play-root" data-combat-root>
         {/* Screen-reader live region for short announcements */}
         <div
           aria-live="polite"
@@ -282,7 +368,29 @@ export default function PlayPage() {
         {/* ============================================================
             MIDDLE — Scene viewer + overlayed action pad + combat layer
             ============================================================ */}
-        <section className="play-middle">
+        <section className="play-middle" data-combat-host style={{ position: "relative" }}>
+          
+          {(showPrompt || showLoading || showExitPicker) && (
+            <div
+              style={{
+                position: "absolute",
+                inset: 0,
+                zIndex: 30,
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+              }}
+            >
+              {showPrompt ? (
+                <CombatPromptOverlay onEngage={handleEngage} onFlee={handleAttemptFlee} />
+              ) : null}
+              {showLoading ? <CombatLoadingOverlay /> : null}
+              {showExitPicker ? (
+                <CombatExitPicker exits={exitOptions} onSelect={handleExitChoice} />
+              ) : null}
+            </div>
+          )}
+
           <div className={`console-frame ${combatActive ? "console-frame--combat" : ""}`}>
             <div className="console-frame__content" aria-hidden={combatActive}>
               <div className={`scene-surface ${combatActive ? "scene-surface--locked" : ""}`}>
@@ -298,42 +406,15 @@ export default function PlayPage() {
                   floor={currentFloor}
                 />
               </div>
-
-              <div className="actions-pad">
-                <ControlPad />
-              </div>
-            </div>
+             </div>
           </div>
 
-          <CombatOverlay active={combatActive} />
-
-          <div className="hide-desktop" style={{ position: "relative" }}>
-            <div className="mobile-side-buttons">
-              <button
-                className="btn btn--ghost"
-                onClick={handleToggleDrawer("character")}
-                aria-label="Open character drawer"
-              >
-                Character
-              </button>
-
-              <button
-                className="btn btn--ghost"
-                onClick={handleToggleDrawer("map")}
-                aria-label="Open map drawer"
-              >
-                Map
-              </button>
-              <button
-                className="btn btn--ghost"
-                onClick={handleToggleDrawer("journal")}
-                aria-label="Open journal drawer"
-              >
-                Journal
-              </button>
-            </div>
+          {/* ⬇️ new glass overlay pad positioned over the scene ⬇️ */}
+          <div className="actions-pad actions-pad--overlay">
+            <ControlPad />
           </div>
         </section>
+
         {/* ============================================================
             RIGHT RAIL — Map + Journal (button opens drawer)
             ============================================================ */}
@@ -348,8 +429,24 @@ export default function PlayPage() {
           onClose={handleCloseDrawer("character")}
           labelledBy="character-drawer-title"
         >
-          <CharacterPanel meters={heroMeters} titleId="character-drawer-title" />
-          <InventoryPanel />
+          <CharacterPanel
+            meters={heroMeters}
+            titleId="character-drawer-title"
+            onClose={handleCloseDrawer("character")}
+          />
+        </SlideDrawer>
+
+        <SlideDrawer
+          id="inventory-drawer"
+          side="left"
+          open={inventoryOpen}
+          onClose={handleCloseDrawer("inventory")}
+          labelledBy="inventory-drawer-title"
+        >
+          <InventoryPanel
+            titleId="inventory-drawer-title"
+            onClose={handleCloseDrawer("inventory")}
+          />
         </SlideDrawer>
 
         <SlideDrawer
@@ -363,7 +460,17 @@ export default function PlayPage() {
         </SlideDrawer>
 
         {/* Journal: bottom sheet on mobile, right drawer on desktop */}
-        <div className="hide-desktop">
+        {isDesktop ? (
+          <SlideDrawer
+            id="journal-drawer-desktop"
+            side="right"
+            open={journalOpen}
+            onClose={handleCloseDrawer("journal")}
+            labelledBy="journal-drawer-title"
+          >
+            <JournalPanel titleId="journal-drawer-title" onClose={handleCloseDrawer("journal")} />
+          </SlideDrawer>
+        ) : (
           <SlideDrawer
             id="journal-drawer-mobile"
             side="bottom"
@@ -372,20 +479,9 @@ export default function PlayPage() {
             onClose={handleCloseDrawer("journal")}
             labelledBy="journal-drawer-title"
           >
-            <JournalPanel titleId="journal-drawer-title" />
+            <JournalPanel titleId="journal-drawer-title" onClose={handleCloseDrawer("journal")} />
           </SlideDrawer>
-        </div>
-        <div className="show-desktop">
-          <SlideDrawer
-            id="journal-drawer-desktop"
-            side="right"
-            open={journalOpen}
-            onClose={handleCloseDrawer("journal")}
-            labelledBy="journal-drawer-title"
-          >
-            <JournalPanel titleId="journal-drawer-title" />
-          </SlideDrawer>
-        </div>
+        )}
 
         {/* Combat actions bottom sheet (auto-opens in combat) */}
         
@@ -397,70 +493,149 @@ export default function PlayPage() {
    OVERLAYS & PANELS (local components)
    ================================================================= */
 
-/** Defeat modal shown when the run is lost. */
-function DefeatOverlay({ onEndRun }: { onEndRun: () => void }) {
+/** Inventory summary (placeholder content; wire to real items later). */
+function CombatPromptOverlay({
+  onEngage,
+  onFlee,
+}: {
+  onEngage: () => void;
+  onFlee: () => void;
+}) {
   return (
     <div
       role="dialog"
-      aria-modal="true"
-      aria-label="Defeat summary"
+      aria-live="polite"
+      aria-label="Combat prompt"
       style={{
-        position: "fixed",
-        inset: 0,
-        background: "rgba(10,4,18,0.85)",
-        backdropFilter: "blur(8px)",
-        display: "flex",
-        alignItems: "center",
-        justifyContent: "center",
+        pointerEvents: "auto",
+        minWidth: 320,
+        maxWidth: 420,
         padding: 24,
-        zIndex: 40,
+        borderRadius: 20,
+        border: "1px solid rgba(255,255,255,0.25)",
+        background: "rgba(7,5,15,0.9)",
+        boxShadow: "0 24px 50px rgba(0,0,0,0.45)",
+        display: "grid",
+        gap: 16,
+        textAlign: "center",
       }}
     >
-      <div
-        style={{
-          width: "min(420px, 100%)",
-          borderRadius: 20,
-          border: "1px solid rgba(244,114,182,0.35)",
-          background: "linear-gradient(180deg, rgba(45,9,30,0.95), rgba(18,8,24,0.92))",
-          boxShadow: "0 36px 80px rgba(0,0,0,0.55)",
-          padding: "28px 32px",
-          display: "grid",
-          gap: 18,
-          textAlign: "center",
-          color: "#fdf4ff",
-        }}
-      >
-        <div style={{ fontSize: 22, fontWeight: 700, letterSpacing: 0.4 }}>
-          You have been defeated.
-        </div>
-        <div style={{ fontSize: 15, color: "rgba(255,241,242,0.85)", lineHeight: 1.5 }}>
-          A piece of your soul lingers.
-        </div>
-        <button
-          onClick={onEndRun}
-          className="btn btn--primary"
-          style={{
-            minHeight: 48,
-            borderRadius: 999,
-            fontSize: 15,
-            fontWeight: 600,
-            textTransform: "uppercase",
-            letterSpacing: 0.12,
-          }}
-          aria-label="End run and return home"
-        >
-          End Run
+      <div style={{ fontSize: 18, fontWeight: 700 }}>Hostile presence detected.</div>
+      <p style={{ margin: 0, color: "rgba(255,255,255,0.85)" }}>
+        You have entered a combat room. Engage now or attempt to flee.
+      </p>
+      <div style={{ display: "flex", gap: 12, justifyContent: "center" }}>
+        <button onClick={onEngage} className="btn btn--primary" style={{ flex: 1, minWidth: 120 }}>
+          Engage
+        </button>
+        <button onClick={onFlee} className="btn btn--ghost" style={{ flex: 1, minWidth: 120 }}>
+          Attempt to Flee
         </button>
       </div>
     </div>
   );
 }
 
-/** Inventory summary (placeholder content; wire to real items later). */
-function InventoryPanel() {
+function CombatLoadingOverlay() {
   return (
-    <div className="menu-panel" aria-label="Inventory" style={{ minHeight: 260 }}>
-      <div className="panel-title">Inventory</div>
+    <div
+      role="status"
+      aria-live="polite"
+      style={{
+        pointerEvents: "auto",
+        minWidth: 280,
+        padding: 24,
+        borderRadius: 20,
+        border: "1px solid rgba(255,255,255,0.18)",
+        background: "rgba(6,4,12,0.85)",
+        boxShadow: "0 20px 40px rgba(0,0,0,0.45)",
+        textAlign: "center",
+        color: "rgba(255,255,255,0.9)",
+      }}
+    >
+      <div style={{ fontSize: 16, fontWeight: 600, marginBottom: 8 }}>Preparing encounter...</div>
+      <p style={{ margin: 0, fontSize: 13, opacity: 0.85 }}>Synchronizing enemy dossiers and initiative.</p>
+    </div>
+  );
+}
+
+type ExitOption = { dir: "north" | "south" | "east" | "west"; x: number; y: number; available: boolean };
+
+function CombatExitPicker({
+  exits,
+  onSelect,
+}: {
+  exits: ExitOption[];
+  onSelect: (dir: ExitOption["dir"]) => void;
+}) {
+  return (
+    <div
+      role="dialog"
+      aria-label="Choose exit"
+      aria-live="polite"
+      style={{
+        pointerEvents: "auto",
+        minWidth: 360,
+        padding: 24,
+        borderRadius: 20,
+        border: "1px solid rgba(255,255,255,0.25)",
+        background: "rgba(5,8,18,0.92)",
+        boxShadow: "0 30px 60px rgba(0,0,0,0.5)",
+        display: "grid",
+        gap: 16,
+        textAlign: "center",
+      }}
+    >
+      <div style={{ fontSize: 18, fontWeight: 700 }}>Combat resolved.</div>
+      <p style={{ margin: 0, color: "rgba(255,255,255,0.8)" }}>Choose your exit to continue the run.</p>
+      <div
+        style={{
+          display: "grid",
+          gridTemplateColumns: "repeat(2, minmax(120px, 1fr))",
+          gap: 12,
+        }}
+      >
+        {exits.map((exit) => (
+          <button
+            key={exit.dir}
+            onClick={() => onSelect(exit.dir)}
+            className="btn btn--ghost"
+            disabled={!exit.available}
+            style={{
+              minHeight: 48,
+              borderColor: exit.available ? "rgba(255,255,255,0.5)" : "rgba(255,255,255,0.15)",
+              opacity: exit.available ? 1 : 0.55,
+            }}
+          >
+            {exit.dir.toUpperCase()}
+          </button>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function InventoryPanel({ onClose, titleId }: { onClose?: () => void; titleId?: string }) {
+  return (
+    <div
+      className="menu-panel"
+      id="inventory-panel"
+      aria-label="Inventory"
+      style={{ minHeight: 260 }}
+    >
+      <div
+        style={{
+          display: "flex",
+          justifyContent: "space-between",
+          alignItems: "center",
+          marginBottom: 8,
+        }}
+      >
+        <div className="panel-title" id={titleId}>
+          Inventory
+        </div>
+        <DrawerCloseButton onClick={onClose} label="Close inventory" />
+      </div>
       <ul className="menu-list">
         <li>
           <div className="menu-link">
@@ -496,16 +671,34 @@ function InventoryPanel() {
 }
 
 /** Character summary with compact meters and a few stats. */
-function CharacterPanel({ meters, titleId }: { meters: GaugeValue[]; titleId?: string }) {
+function CharacterPanel({
+  meters,
+  titleId,
+  onClose,
+}: {
+  meters: GaugeValue[];
+  titleId?: string;
+  onClose?: () => void;
+}) {
   return (
-    <div className="menu-panel" aria-label="Character Sheet">
-      <div className="panel-title" id={titleId}>
-        Character
+    <div className="menu-panel" id="character-panel" aria-label="Character Sheet">
+      <div
+        style={{
+          display: "flex",
+          justifyContent: "space-between",
+          alignItems: "center",
+          marginBottom: 8,
+        }}
+      >
+        <div className="panel-title" id={titleId}>
+          Character
+        </div>
+        <DrawerCloseButton onClick={onClose} label="Close character drawer" />
       </div>
       <CompactMeterGroup meters={meters} />
       <div style={{ display: "grid", gap: 10 }}>
-        <PanelRow label="Level" value="27" />
-        <PanelRow label="XP" value="83,234 / 90,000" />
+        <PanelRow label="Level" value="1" />
+        <PanelRow label="XP" value="0 / 1000" />
         <PanelRow label="Lifetime Climbs" value="42" />
         <PanelRow label="Highest Clear" value="Floor 7" />
         <div>
@@ -525,6 +718,27 @@ function PanelRow({ label, value }: { label: string; value: string }) {
       <strong>{label}</strong>
       <span>{value}</span>
     </div>
+  );
+}
+
+function DrawerCloseButton({ onClick, label }: { onClick?: () => void; label: string }) {
+  if (!onClick) return null;
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      aria-label={label}
+      style={{
+        padding: "6px 12px",
+        borderRadius: 8,
+        border: "1px solid rgba(255,255,255,0.2)",
+        background: "rgba(255,255,255,0.08)",
+        color: "inherit",
+        fontWeight: 600,
+      }}
+    >
+      Close
+    </button>
   );
 }
 
@@ -560,7 +774,7 @@ function FinalExtract({ onExtract }: { onExtract: () => void }) {
 }
 
 /** Journal panel with two tabs: Run Log and Combat Log. */
-function JournalPanel({ titleId }: { titleId?: string }) {
+function JournalPanel({ titleId, onClose }: { titleId?: string; onClose?: () => void }) {
   const runLog = useRunStore((s) => s.runLog);
   const combatLog = useRunStore((s) => s.combatLog);
   const combatBuffer = useRunStore((s) => s.combatLogBuffer);
@@ -602,8 +816,18 @@ function JournalPanel({ titleId }: { titleId?: string }) {
 
   return (
     <div className="menu-panel" aria-label="Journal" style={{ minHeight: 260 }}>
-      <div className="panel-title" id={titleId}>
-        Journal
+      <div
+        style={{
+          display: "flex",
+          justifyContent: "space-between",
+          alignItems: "center",
+          marginBottom: 8,
+        }}
+      >
+        <div className="panel-title" id={titleId}>
+          Journal
+        </div>
+        <DrawerCloseButton onClick={onClose} label="Close journal" />
       </div>
 
       {/* Tabs */}
@@ -808,21 +1032,7 @@ function MapPanel({ onClose, titleId }: { onClose?: () => void; titleId?: string
         }}
       >
         <strong id={titleId}>Map</strong>
-        {onClose && (
-          <button
-            className="hide-desktop"
-            onClick={onClose}
-            aria-label="Close map"
-            style={{
-              padding: "6px 10px",
-              borderRadius: 8,
-              border: "1px solid rgba(255,255,255,0.15)",
-              background: "rgba(255,255,255,0.08)",
-            }}
-          >
-            Close
-          </button>
-        )}
+        <DrawerCloseButton onClick={onClose} label="Close map" />
       </div>
 
       {/* Grid of tiles */}

@@ -26,6 +26,7 @@
   --glass-strong:   rgba(18, 14, 28, 0.82);
   --stroke:         rgba(255, 255, 255, 0.08);
   --inner-stroke:   rgba(255, 255, 255, 0.06);
+  --glass-mask-solid: rgb(0 0 0 / 1);
   --glass-panel-bg: linear-gradient(180deg, rgba(18,14,28,0.60), rgba(10,8,16,0.50));
   --glass-panel-shadow: 0 24px 60px rgba(0,0,0,0.45);
   --glass-panel-inner: inset 0 0 0 1px var(--inner-stroke);
@@ -52,6 +53,11 @@
   --z-drawers: 120;
   --z-toasts: 140;
   --z-modals: 160;
+  --z-play-scene: 10;
+  --z-play-control-pad: 50;
+  --z-play-rail: 60;
+  --z-play-floaters: 80;
+  --z-play-menus: 90;
 
   /* Motion */
   --easing: cubic-bezier(0.22, 0.8, 0.24, 1);
@@ -60,9 +66,10 @@
 
   /* Safe areas */
   --safe-bottom: env(safe-area-inset-bottom, 0px);
+  --controlpad-h: 0px;
 
   /* Background image hook (override per-theme/page if needed) */
-  --page-bg-url: url("/bg/tower_stonehall_dim.jpg");
+  --page-bg-url: url("/backgrounds/tower-bg.png");
 }
 
 /* ---------- 2) Resets & base typography ---------- */

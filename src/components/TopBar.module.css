@@ -8,38 +8,14 @@
   --topbar-glass: rgba(14, 12, 22, 0.38);
 }
 
-.overlay {
-   /* When the bar is embedded inside the actions-pad, it must NOT be fixed */
-   position: static;
-   inset: auto;
-   z-index: auto;
-   padding: 0;                 /* the pad provides its own padding */
-   backdrop-filter: none;      /* visuals come from the pad */
-   background: transparent;
-   border: 0;
- }
- 
- /* Optional compact tweak so overlay buttons feel tighter in the console */
- .overlay .button {
-   min-height: 46px;
-   border-radius: 14px;
- }
- 
- /* Utility row for Journal / Map / Inventory / Look */
- .utilityRow {
-   display: grid;
-   grid-template-columns: repeat(4, 1fr);
-   gap: 8px;
-   margin-bottom: 8px;
- }
-
+/* ===== Bar ===== */
 
 .bar {
   position: fixed;
   inset: 0 0 auto;
   z-index: 90;
   display: grid;
-  grid-template-columns: auto 1fr auto;
+  grid-template-columns: auto auto 1fr auto;
   align-items: center;
   gap: 16px;
   padding: calc(10px + var(--topbar-safe-top)) clamp(14px, 4vw, 28px) 10px;
@@ -47,7 +23,7 @@
   background: linear-gradient(180deg, rgba(8, 6, 14, 0.05), var(--topbar-glass));
   border-bottom: 1px solid rgba(255, 255, 255, 0.06);
   color: var(--topbar-ink);
-  pointer-events: none;
+  pointer-events: none; /* buttons opt back in */
 }
 
 .burger {
@@ -63,37 +39,14 @@
   pointer-events: auto;
   transition: background 160ms ease, border-color 160ms ease;
 }
+.burger:focus-visible { outline: 2px solid rgba(244, 238, 215, 0.6); outline-offset: 3px; }
+.burger span { display: block; width: 18px; height: 2px; border-radius: 2px; background: currentColor; transition: transform 160ms ease, opacity 160ms ease; }
+.burger span + span { margin-top: 4px; }
+.burgerOpen span:nth-child(1) { transform: translateY(6px) rotate(45deg); }
+.burgerOpen span:nth-child(2) { opacity: 0; }
+.burgerOpen span:nth-child(3) { transform: translateY(-6px) rotate(-45deg); }
 
-.burger:focus-visible {
-  outline: 2px solid rgba(244, 238, 215, 0.6);
-  outline-offset: 3px;
-}
-
-.burger span {
-  display: block;
-  width: 18px;
-  height: 2px;
-  border-radius: 2px;
-  background: currentColor;
-  transition: transform 160ms ease, opacity 160ms ease;
-}
-
-.burger span + span {
-  margin-top: 4px;
-}
-
-.burgerOpen span:nth-child(1) {
-  transform: translateY(6px) rotate(45deg);
-}
-
-.burgerOpen span:nth-child(2) {
-  opacity: 0;
-}
-
-.burgerOpen span:nth-child(3) {
-  transform: translateY(-6px) rotate(-45deg);
-}
-
+/* Floor badge */
 .floorBadge {
   display: inline-flex;
   align-items: baseline;
@@ -107,21 +60,58 @@
   letter-spacing: 0.08em;
   pointer-events: auto;
 }
+.floorLabel { text-transform: uppercase; font-size: 0.65rem; opacity: 0.72; }
+.floorValue { font-size: clamp(1rem, 2.4vw, 1.4rem); }
 
-.floorLabel {
-  text-transform: uppercase;
-  font-size: 0.65rem;
-  opacity: 0.72;
+/* NEW: quick actions cluster */
+.quickActions {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  justify-content: flex-end;
+  flex-wrap: wrap;
+  pointer-events: auto;        /* re-enable clicks (bar is pointer-events:none) */
+  max-width: 100%;
 }
 
-.floorValue {
-  font-size: clamp(1rem, 2.4vw, 1.4rem);
+.topButton {
+  min-height: 36px;
+  padding: 6px 14px;
+  border-radius: 12px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  border: 1px solid rgba(244, 238, 215, 0.22);
+  background: rgba(14, 12, 22, 0.45);
+  color: var(--topbar-ink);
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.05);
+  cursor: pointer;
+  transition: background 160ms ease, border-color 160ms ease, transform 80ms ease;
+}
+.topButton:hover { background: rgba(244, 238, 215, 0.08); border-color: rgba(244, 238, 215, 0.28); }
+.topButton:active { transform: translateY(1px); }
+.topButton:focus-visible { outline: 2px solid rgba(244, 238, 215, 0.6); outline-offset: 3px; }
+
+/* Responsive: shrink or hide labels if needed */
+@media (max-width: 820px) {
+  .topButton { padding: 6px 10px; }
+}
+@media (max-width: 640px) {
+  .quickActions {
+    width: 100%;
+    justify-content: flex-start;
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    gap: 8px;
+    padding-bottom: 4px;
+  }
+  .quickActions::-webkit-scrollbar { display: none; }
+  .topButton { flex: 0 0 auto; }
+  .rightSpacer { display: none; }
 }
 
-.rightSpacer {
-  width: 40px;
-  pointer-events: none;
-}
+.rightSpacer { width: 40px; pointer-events: none; }
+
+/* ===== Drawer / Scrim ===== */
 
 .scrim {
   position: fixed;
@@ -132,11 +122,7 @@
   transition: opacity 200ms ease;
   z-index: 60;
 }
-
-.scrimVisible {
-  opacity: 1;
-  pointer-events: auto;
-}
+.scrimVisible { opacity: 1; pointer-events: auto; }
 
 .drawer {
   position: fixed;
@@ -152,10 +138,7 @@
   grid-template-rows: auto 1fr;
   backdrop-filter: blur(16px);
 }
-
-.drawerOpen {
-  transform: translateX(0);
-}
+.drawerOpen { transform: translateX(0); }
 
 .drawerHeader {
   display: grid;
@@ -166,7 +149,6 @@
   border-bottom: 1px solid rgba(244, 238, 215, 0.1);
   color: var(--topbar-ink);
 }
-
 .brandDot {
   width: 40px;
   height: 40px;
@@ -178,24 +160,9 @@
   font-weight: 800;
   letter-spacing: 0.08em;
 }
-
-.brandCopy {
-  display: grid;
-  gap: 4px;
-  min-width: 0;
-}
-
-.brandTitle {
-  font-weight: 700;
-  letter-spacing: 0.04em;
-}
-
-.brandSubtitle {
-  font-size: 0.7rem;
-  text-transform: uppercase;
-  letter-spacing: 0.2em;
-  opacity: 0.72;
-}
+.brandCopy { display: grid; gap: 4px; min-width: 0; }
+.brandTitle { font-weight: 700; letter-spacing: 0.04em; }
+.brandSubtitle { font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.2em; opacity: 0.72; }
 
 .menuList {
   list-style: none;
@@ -205,7 +172,6 @@
   gap: 6px;
   color: var(--topbar-ink);
 }
-
 .menuLink {
   display: block;
   padding: 12px 14px;
@@ -215,45 +181,16 @@
   text-decoration: none;
   transition: background 160ms ease, border-color 160ms ease;
 }
-
 .menuLink:hover,
 .menuLink:focus-visible {
   background: rgba(244, 238, 215, 0.08);
   border-color: rgba(244, 238, 215, 0.16);
   outline: none;
 }
+.rule { height: 1px; background: linear-gradient(90deg, transparent, rgba(244, 238, 215, 0.3), transparent); margin: 12px 10px; }
 
-.rule {
-  height: 1px;
-  background: linear-gradient(90deg, transparent, rgba(244, 238, 215, 0.3), transparent);
-  margin: 12px 10px;
-}
+/* ===== Overlay mode support (if you ever reuse TopBar inside overlays) ===== */
 
-.menuLink:focus-visible {
-  outline: 2px solid rgba(225, 205, 160, 0.75);
-  outline-offset: 2px;
-}
-/* When the bar lives inside the console overlay */
-/* Overlay mode: when ThumbBar lives inside the console overlay */
-.overlay {
-  position: static;        /* not fixed to viewport */
-  inset: auto;
-  background: transparent; /* page-level frame provides visuals */
-  border: 0;
-  padding: 0;
-  backdrop-filter: none;
-}
-
-/* Optional compact tweak for overlay buttons */
-.overlay .button {
-  min-height: 46px;
-  border-radius: 14px;
-}
-
-/* Optional utility row (Journal / Map / Inventory / Look) */
-.utilityRow {
-  display: grid;
-  grid-template-columns: repeat(4, 1fr);
-  gap: 8px;
-  margin-bottom: 8px;
-}
+.overlay { position: static; inset: auto; background: transparent; border: 0; padding: 0; backdrop-filter: none; }
+.overlay .button { min-height: 46px; border-radius: 14px; }
+.utilityRow { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; margin-bottom: 8px; }

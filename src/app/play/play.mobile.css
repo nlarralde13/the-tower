@@ -10,6 +10,36 @@
   overflow: hidden;
 }
 
+.play-root {
+  position: relative;
+  isolation: isolate;
+}
+
+.play-middle {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: clamp(12px, 2vw, 18px);
+  min-height: 0;
+  isolation: isolate;
+  --combat-rail-height: 0px;
+  --controlpad-h: 0px;
+}
+
+.play-middle > .combat-rail { order: 1; }
+.play-middle > .console-frame {
+  order: 2;
+  position: relative;
+  z-index: var(--z-play-scene, 10);
+  flex: 1 1 auto;
+  display: flex;
+}
+.play-middle > .console-frame .console-frame__content {
+  flex: 1 1 auto;
+}
+.play-middle > .combat-overlay { order: 3; }
+
 .console-frame--combat {
   border-color: var(--accent-combat-border);
   box-shadow: var(--glass-panel-shadow), var(--accent-combat-glow), var(--glass-panel-inner);
@@ -41,7 +71,10 @@
 
     /* leave room for TopBar + (optional) global bottom bar */
     padding: calc(var(--topbar-height) + 12px) 12px
-             calc(16px + var(--safe-bottom));
+             calc(16px + var(--controlpad-h) + var(--safe-bottom));
+  }
+  .play-middle {
+    --controlpad-h: clamp(180px, 36vh, 280px);
   }
 
   /* Rails are drawer-driven on mobile */
@@ -49,36 +82,48 @@
   .play-right { display: none !important; }
 
   /* Handheld console shell */
-  .console-frame { position: relative; }
+  .console-frame {
+    position: relative;
+    flex: 1 1 auto;
+  }
 
-  /* Stack: screen on top, controller below */
+  /* Stack: screen on top, controller overlays bottom */
   .console-frame__content {
     position: relative;
     display: flex;
     flex-direction: column;
     gap: 12px;
-    padding: 12px;
-    min-height: 0; /* avoid weird growth */
+    padding: 16px;
+    min-height: calc(100dvh - var(--topbar-height) - 64px);
+    padding-bottom: calc(16px + var(--controlpad-h));
   }
 
-  /* "Screen" area: fixed aspect like GB/NDS (4:3) */
+  /* "Screen" area now stretches to fill remaining height */
   .scene-surface {
+    position: relative;
+    flex: 1 1 auto;
+    min-height: 0;
     width: 100%;
-    aspect-ratio: 4 / 3;    /* <- key to handheld feel */
-    border-radius: var(--r-sm);
+    border-radius: var(--r-md);
     overflow: hidden;
-    background: #000;       /* black bezel behind the viewer */
+    background: #04040a;
   }
 
   /* If you dim/lock in combat, keep the box height */
   .scene-surface--locked { pointer-events: none; }
 
-  /* Controller pad: sits UNDER the screen, not overlayed */
+  /* Controller pad overlays the lower portion of the scene */
   .actions-pad {
-    position: static;          /* was absolute */
-    margin-top: 4px;
-    padding: 12px;
-    z-index: 1;                /* just in case */
+    position: absolute;
+    left: 50%;
+    transform: translateX(-50%);
+    width: min(480px, calc(100% - 32px));
+    bottom: 16px;
+    margin: 0;
+    padding: 14px;
+    z-index: 3;
+    backdrop-filter: blur(12px);
+    background: rgba(12, 8, 18, 0.8);
   }
 
   /* D-pad style grid; your ThumbBar already uses these hooks */

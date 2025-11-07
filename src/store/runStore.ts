@@ -17,6 +17,31 @@ type RunMode = "explore" | "combat";
 
 type ScenePools = Record<string, { remaining: string[]; last?: string }>;
 
+type CombatStatus = "idle" | "prompt" | "loading" | "ready" | "resolving";
+
+type CombatFirstStrike = "player" | "enemy" | null;
+
+type CombatOutcome = "victory" | "defeat" | null;
+
+type CombatSourceRoom = {
+  floor: number;
+  x: number;
+  y: number;
+  roomType: RoomType | null;
+  sceneId: string | null;
+};
+
+type CombatSession = {
+  status: CombatStatus;
+  sourceRoom: CombatSourceRoom | null;
+  enteredAt: number | null;
+  transitionId: string | null;
+  firstStrike: CombatFirstStrike;
+  startedAt: number | null;
+  readyAt: number | null;
+  outcome: CombatOutcome;
+};
+
 export type RunLogCategory = "movement" | "combat" | "loot" | "status" | "system";
 
 export type RunLogEntry = {
@@ -75,6 +100,7 @@ export type RunState = {
   combatLog: CombatLogEntry[];
   combatLogBuffer: CombatLogEntry[];
   combatLogEncounterId: string | null;
+  combatSession: CombatSession;
   activeCombat: {
     floor: number;
     x: number;
@@ -87,6 +113,7 @@ export type RunState = {
     gridOverlay: boolean;
   };
   nextEncounterSerial: number;
+  persistHydrated: boolean;
 };
 
 type RunActions = {
@@ -94,6 +121,9 @@ type RunActions = {
   resumeFromStorage: () => void;
   move: (dir: "north" | "south" | "west" | "east" | "N" | "S" | "E" | "W") => void;
   roomTypeAt: (x: number, y: number) => RoomType | null;
+  engageCombat: () => Promise<void>;
+  attemptCombatFlee: () => Promise<"escaped" | "failed" | "unavailable">;
+  resolveCombatExit: (dir: "north" | "south" | "east" | "west") => void;
   toggleGridOverlay: (on?: boolean) => void;
   _devSetRunFromSeed?: (floor: number, floorSeed: number) => Promise<void>;
   ascend?: () => Promise<void>;
@@ -116,6 +146,9 @@ const LETTER_TO_WORD: Record<"N" | "S" | "E" | "W", "north" | "south" | "east" |
   E: "east",
   W: "west",
 };
+const MIN_COMBAT_LOAD_MS = 1000;
+const COMBAT_EXIT_ROUTE_DELAY_MS = 650;
+const ENEMY_OPENING_STRIKE_DELAY_MS = 500;
 
 function rand32(): number {
   if (typeof crypto !== "undefined" && "getRandomValues" in crypto) {
@@ -169,6 +202,44 @@ function drawFromPool(pools: ScenePools, type: RoomType): { path: string; pools:
   // Log for debugging randomness
   if (typeof window !== "undefined") console.log(`[scene] ${key} -> ${choice}`);
   return { path: choice ?? defaultPath, pools: updated };
+}
+
+function initialCombatSession(): CombatSession {
+  return {
+    status: "idle",
+    sourceRoom: null,
+    enteredAt: null,
+    transitionId: null,
+    firstStrike: null,
+    startedAt: null,
+    readyAt: null,
+    outcome: null,
+  };
+}
+
+function makeTransitionId(): string {
+  return `${Date.now().toString(36)}:${Math.random().toString(36).slice(2, 8)}`;
+}
+
+function sleep(ms: number): Promise<void> {
+  if (ms <= 0) return Promise.resolve();
+  return new Promise((resolve) => {
+    setTimeout(resolve, ms);
+  });
+}
+
+function traceCombatStatus(id: string | null, status: CombatStatus, note?: string) {
+  if (typeof window === "undefined") return;
+  const timestamp = new Date().toISOString();
+  const details = note ? ` (${note})` : "";
+  try {
+    console.debug?.(`[combat-session] ${status}${details}`, {
+      transitionId: id ?? "none",
+      timestamp,
+    });
+  } catch {
+    // ignore console failures
+  }
 }
 
 const ROOM_CLEAR_MESSAGE = "The enemy was defeated and the room is now clear to move on.";
@@ -338,10 +409,12 @@ function buildSnapshot(
     combatLogBuffer: overrides.combatLogBuffer ?? state.combatLogBuffer,
     combatLogEncounterId:
       overrides.combatLogEncounterId ?? state.combatLogEncounterId,
+    combatSession: overrides.combatSession ?? state.combatSession,
     activeCombat: overrides.activeCombat ?? state.activeCombat,
     defeatOverlay: overrides.defeatOverlay ?? state.defeatOverlay,
     dev: overrides.dev ?? state.dev,
     nextEncounterSerial: overrides.nextEncounterSerial ?? state.nextEncounterSerial,
+    persistHydrated: false,
   };
 }
 
@@ -432,10 +505,12 @@ export const useRunStore = create<RunState & RunActions>((set, get) => ({
   combatLog: [],
   combatLogBuffer: [],
   combatLogEncounterId: null,
+  combatSession: initialCombatSession(),
   defeatOverlay: false,
   activeCombat: null,
   nextEncounterSerial: 0,
   dev: { gridOverlay: false },
+  persistHydrated: false,
 
   resumeFromStorage: () => {
     if (typeof window === "undefined") return;
@@ -459,10 +534,12 @@ export const useRunStore = create<RunState & RunActions>((set, get) => ({
       combatLog: parsed.combatLog ?? [],
       combatLogBuffer: parsed.combatLogBuffer ?? [],
       combatLogEncounterId: parsed.combatLogEncounterId ?? null,
+      combatSession: initialCombatSession(),
       defeatOverlay: parsed.defeatOverlay ?? false,
       activeCombat: null,
       nextEncounterSerial: parsed.nextEncounterSerial ?? 0,
       dev: parsed.dev ?? { gridOverlay: false },
+      persistHydrated: true,
       }));
       const combatState = useCombatStore.getState();
       if (combatState.endEncounter) {
@@ -712,10 +789,12 @@ export const useRunStore = create<RunState & RunActions>((set, get) => ({
       combatLogBuffer: [],
       combatLogEncounterId: null,
       completedRooms: {},
+      combatSession: initialCombatSession(),
       defeatOverlay: false,
       activeCombat: null,
       nextEncounterSerial: 0,
       dev: { gridOverlay: false },
+      persistHydrated: true,
     };
     set(() => newState);
     if (typeof window !== "undefined") localStorage.setItem(STORAGE_KEY, JSON.stringify(newState));
@@ -745,6 +824,7 @@ export const useRunStore = create<RunState & RunActions>((set, get) => ({
   move: (dir) => {
     const s = get();
     if (s.mode === "combat" || s.defeatOverlay) return;
+    if (s.combatSession.status !== "idle") return;
     const grid = s.grid;
     const pos = s.playerPos;
     if (!grid || !pos) return;
@@ -785,42 +865,23 @@ export const useRunStore = create<RunState & RunActions>((set, get) => ({
       dedupeKey: `room:${floor}:${nx},${ny}:visit`,
     });
 
-    let mode: RunMode = "explore";
     let activeCombat: RunState["activeCombat"] = null;
     let nextEncounterSerial = s.nextEncounterSerial;
-    let initiativeLine: string | undefined;
-    let enemyNames: string[] = [];
-    let encounterId: string | null = null;
+    let combatSessionUpdate: CombatSession | undefined;
 
     if (target.type === "combat" && !alreadyCleared) {
-      mode = "combat";
+      const previousRoom =
+        pos && grid
+          ? {
+              floor: s.currentFloor,
+              x: pos.x,
+              y: pos.y,
+              roomType: (grid.cells[idx(pos.x, pos.y, grid.width)]?.type as RoomType) ?? null,
+              sceneId: s.sceneId ?? null,
+            }
+          : null;
       const enemies = selectEncounterEnemies(s.currentFloor);
       const encounterSerial = s.nextEncounterSerial;
-      const encounterSeed = `${s.runSeed ?? rand32()}:${key}:${encounterSerial}`;
-      const combatState = useCombatStore.getState();
-      if (combatState.endEncounter) {
-        combatState.endEncounter();
-      }
-      combatState.beginEncounter(
-        enemies,
-        buildPlayerEncounterState(encounterSerial),
-        encounterSeed
-      );
-      const encounter = useCombatStore.getState().encounter;
-      initiativeLine = formatInitiativeJournal(encounter);
-      if (encounter) {
-        encounterId = encounter.id;
-        const names: string[] = [];
-        for (const entityId of encounter.order) {
-          const entity = encounter.entities[entityId];
-          if (entity?.faction === "enemy" && entity.alive) {
-            names.push(entity.name ?? entityId);
-          }
-        }
-        enemyNames = names;
-      } else {
-        enemyNames = enemies.map((id) => getEnemyDefinition(id)?.name ?? id);
-      }
       activeCombat = {
         floor: s.currentFloor,
         x: nx,
@@ -829,32 +890,37 @@ export const useRunStore = create<RunState & RunActions>((set, get) => ({
         encounterSerial,
       };
       nextEncounterSerial = encounterSerial + 1;
-      if (enemyNames.length) {
-        runEvents.push({
-          message: `Combat started against ${formatList(enemyNames)}.`,
-          category: "combat",
-          floor,
-          location,
-        });
-      } else {
-        runEvents.push({
-          message: "Combat started.",
-          category: "combat",
-          floor,
-          location,
-        });
-      }
+      const transitionId = makeTransitionId();
+      combatSessionUpdate = {
+        status: "prompt",
+        sourceRoom: previousRoom,
+        enteredAt: Date.now(),
+        transitionId,
+        firstStrike: null,
+        startedAt: null,
+        readyAt: null,
+        outcome: null,
+      };
+      traceCombatStatus(transitionId, "prompt", "room-entry");
+      runEvents.push({
+        message: "You have entered a combat room.",
+        category: "combat",
+        floor,
+        location,
+      });
     }
 
     const nextState: Partial<RunState> = {
       playerPos: { x: nx, y: ny },
       sceneId: path,
       pools,
-      mode,
       activeCombat,
       visitedRooms: { ...s.visitedRooms, [key]: true },
       nextEncounterSerial,
     };
+    if (combatSessionUpdate) {
+      nextState.combatSession = combatSessionUpdate;
+    }
     set((prev) => ({ ...prev, ...nextState }));
     if (typeof window !== "undefined") {
       try {
@@ -867,19 +933,202 @@ export const useRunStore = create<RunState & RunActions>((set, get) => ({
       }
     }
 
-    const { logRunEvent, logCombatEvent } = get();
+    const { logRunEvent } = get();
     for (const event of runEvents) {
       logRunEvent(event);
+    }
+  },
+
+  engageCombat: async () => {
+    const state = get();
+    const session = state.combatSession;
+    if (session.status !== "prompt") return;
+    const transitionId = session.transitionId ?? makeTransitionId();
+    const startedAt = Date.now();
+    traceCombatStatus(transitionId, "loading", "engage");
+    set((prev) => ({
+      ...prev,
+      combatSession: {
+        ...prev.combatSession,
+        status: "loading",
+        startedAt,
+        transitionId,
+        outcome: null,
+      },
+    }));
+
+    const active = get().activeCombat;
+    if (!active) {
+      set((prev) => ({
+        ...prev,
+        combatSession: initialCombatSession(),
+        activeCombat: null,
+        mode: "explore",
+      }));
+      return;
+    }
+
+    const key = roomKey(active.floor, active.x, active.y);
+    const encounterSeed = `${get().runSeed ?? rand32()}:${key}:${active.encounterSerial}`;
+    const combatState = useCombatStore.getState();
+    if (combatState.endEncounter) {
+      combatState.endEncounter();
+    }
+    const forcedFirst = session.firstStrike === "enemy" ? "enemy" : undefined;
+    try {
+      combatState.beginEncounter(
+        active.enemies,
+        buildPlayerEncounterState(active.encounterSerial),
+        encounterSeed,
+        forcedFirst ? { forceFirst: forcedFirst } : undefined
+      );
+    } catch (error) {
+      console.error("Failed to begin encounter", error);
+      set((prev) => ({
+        ...prev,
+        combatSession: initialCombatSession(),
+        activeCombat: null,
+        mode: "explore",
+      }));
+      return;
+    }
+
+    const encounter = useCombatStore.getState().encounter;
+    const encounterId = encounter?.id ?? null;
+    const initiativeLine = formatInitiativeJournal(encounter);
+    const { logRunEvent, logCombatEvent } = get();
+    const enemyNames: string[] =
+      encounter && encounter.order.length
+        ? encounter.order
+            .map((entityId) => encounter.entities[entityId])
+            .filter((entity) => entity?.faction === "enemy" && entity.alive)
+            .map((entity) => entity?.name ?? entity?.id ?? "")
+            .filter(Boolean)
+        : active.enemies.map((id) => getEnemyDefinition(id)?.name ?? id);
+
+    const location = { x: active.x, y: active.y };
+    if (enemyNames.length) {
+      logRunEvent({
+        message: `Combat started against ${formatList(enemyNames)}.`,
+        category: "combat",
+        floor: active.floor,
+        location,
+      });
+    } else {
+      logRunEvent({
+        message: "Combat started.",
+        category: "combat",
+        floor: active.floor,
+        location,
+      });
     }
     if (initiativeLine && encounterId) {
       logCombatEvent({
         encounterId,
         message: initiativeLine,
-        floor,
+        floor: active.floor,
         location,
         tag: "turn",
       });
     }
+
+    const effectiveFirstStrike: CombatFirstStrike =
+      forcedFirst ?? (encounter?.initiative.first ?? null);
+    const elapsed = Date.now() - startedAt;
+    if (elapsed < MIN_COMBAT_LOAD_MS) {
+      await sleep(MIN_COMBAT_LOAD_MS - elapsed);
+    }
+    if (get().combatSession.transitionId !== transitionId) return;
+    traceCombatStatus(transitionId, "ready", "engage-complete");
+    set((prev) => ({
+      ...prev,
+      mode: "combat",
+      combatSession: {
+        ...prev.combatSession,
+        status: "ready",
+        readyAt: Date.now(),
+        firstStrike: effectiveFirstStrike,
+      },
+    }));
+    if (effectiveFirstStrike === "enemy") {
+      const api = useCombatStore.getState();
+      api.forceEnemyAdvance?.(ENEMY_OPENING_STRIKE_DELAY_MS);
+    }
+  },
+
+  attemptCombatFlee: async () => {
+    const s = get();
+    if (s.combatSession.status !== "prompt") return "unavailable";
+    const source = s.combatSession.sourceRoom;
+    const { logRunEvent } = get();
+    const location = s.playerPos ? { x: s.playerPos.x, y: s.playerPos.y } : undefined;
+    if (!source) {
+      logRunEvent({
+        message: "No exit to retreat through. You must fight.",
+        category: "combat",
+        floor: s.currentFloor,
+        location,
+      });
+      await get().engageCombat();
+      return "failed";
+    }
+    const roll = rand32() / 0xffffffff;
+    const success = roll >= 0.4;
+    if (success) {
+      logRunEvent({
+        message: "You slam the door and escape!",
+        category: "combat",
+        floor: s.currentFloor,
+        location: { x: source.x, y: source.y },
+      });
+      traceCombatStatus(s.combatSession.transitionId, "idle", "flee-success");
+      const updates: Partial<RunState> = {
+        playerPos: { x: source.x, y: source.y },
+        sceneId: source.sceneId ?? s.sceneId,
+        combatSession: initialCombatSession(),
+        activeCombat: null,
+        mode: "explore",
+      };
+      set((prev) => {
+        const snapshot = buildSnapshot(prev, updates);
+        if (typeof window !== "undefined") {
+          localStorage.setItem(STORAGE_KEY, JSON.stringify(snapshot));
+        }
+        return { ...prev, ...updates };
+      });
+      return "escaped";
+    }
+    logRunEvent({
+      message: "You fail to escape and the enemy seizes the initiative!",
+      category: "combat",
+      floor: s.currentFloor,
+      location,
+    });
+    set((prev) => ({
+      ...prev,
+      combatSession: {
+        ...prev.combatSession,
+        firstStrike: "enemy",
+      },
+    }));
+    await get().engageCombat();
+    return "failed";
+  },
+
+  resolveCombatExit: (dir) => {
+    const s = get();
+    if (s.combatSession.status !== "resolving") return;
+    if (s.combatSession.outcome !== "victory") return;
+    const transitionId = s.combatSession.transitionId;
+    traceCombatStatus(transitionId, "idle", "exit-chosen");
+    set((prev) => ({
+      ...prev,
+      combatSession: initialCombatSession(),
+      activeCombat: null,
+    }));
+    setTimeout(() => {
+      get().move(dir);
+    }, 0);
   },
 
   toggleGridOverlay: (on) => set((s) => ({ dev: { gridOverlay: on ?? !s.dev.gridOverlay } })),
@@ -985,12 +1234,22 @@ export const useRunStore = create<RunState & RunActions>((set, get) => ({
       });
     }
 
+    const sessionId = s.combatSession.transitionId ?? makeTransitionId();
+    const sessionUpdate: CombatSession = {
+      ...s.combatSession,
+      transitionId: sessionId,
+      status: "resolving",
+      outcome: victory ? "victory" : "defeat",
+      sourceRoom: null,
+    };
+    traceCombatStatus(sessionId, "resolving", victory ? "victory" : "defeat");
+
     const nextState: Partial<RunState> = {
       grid: updatedGrid,
       completedRooms,
-      mode: "explore",
-      activeCombat: null,
+      activeCombat: victory ? active : null,
       defeatOverlay: victory ? false : true,
+      combatSession: sessionUpdate,
     };
 
     set((prev) => ({ ...prev, ...nextState }));
@@ -1003,6 +1262,14 @@ export const useRunStore = create<RunState & RunActions>((set, get) => ({
         // ignore
       }
     }
+
+    setTimeout(() => {
+      const latest = get();
+      if (latest.combatSession.transitionId !== sessionId) return;
+      if (latest.mode !== "explore") {
+        set((prev) => ({ ...prev, mode: "explore" }));
+      }
+    }, COMBAT_EXIT_ROUTE_DELAY_MS);
 
     const { logRunEvent, flushCombatToPersistent } = get();
     for (const event of runEvents) {
@@ -1049,10 +1316,12 @@ export const useRunStore = create<RunState & RunActions>((set, get) => ({
       combatLogBuffer: [],
       combatLogEncounterId: null,
       completedRooms: {},
+      combatSession: initialCombatSession(),
       defeatOverlay: false,
       activeCombat: null,
       nextEncounterSerial: 0,
       dev: { gridOverlay: get().dev.gridOverlay },
+      persistHydrated: true,
     };
     set(() => newState);
     if (typeof window !== "undefined") localStorage.setItem(STORAGE_KEY, JSON.stringify(newState));
@@ -1126,6 +1395,8 @@ export const useRunStore = create<RunState & RunActions>((set, get) => ({
       visitedRooms: { ...s.visitedRooms, [entryKey]: true },
       activeCombat: null,
       defeatOverlay: false,
+      combatSession: initialCombatSession(),
+      persistHydrated: true,
     };
     set((prev) => ({ ...prev, ...newState }));
     if (typeof window !== "undefined") {
@@ -1169,10 +1440,12 @@ export const useRunStore = create<RunState & RunActions>((set, get) => ({
       combatLogBuffer: [],
       combatLogEncounterId: null,
       completedRooms: {},
+      combatSession: initialCombatSession(),
       defeatOverlay: false,
       activeCombat: null,
       nextEncounterSerial: 0,
       dev: { gridOverlay: false },
+      persistHydrated: true,
     };
     set(() => cleared);
     if (typeof window !== "undefined") localStorage.setItem(STORAGE_KEY, JSON.stringify(cleared));

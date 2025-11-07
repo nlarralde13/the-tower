@@ -2,6 +2,7 @@
 
 import React, { useCallback, useMemo } from "react";
 import dynamic from "next/dynamic";
+import { useRouter } from "next/navigation";
 import { useRunStore } from "@/store/runStore";
 import { useUIStore } from "@/store/uiStore";
 
@@ -10,7 +11,6 @@ const ThumbBar = dynamic(() => import("@/components/ThumbBar"), { ssr: false });
 
 type Direction = "north" | "south" | "west" | "east";
 
-const NOOP = () => {};
 const DIR_TO_LETTER: Record<Direction, "N" | "S" | "E" | "W"> = {
   north: "N",
   south: "S",
@@ -19,13 +19,14 @@ const DIR_TO_LETTER: Record<Direction, "N" | "S" | "E" | "W"> = {
 };
 
 function ExplorePadInner() {
+  const router = useRouter();
   const move = useRunStore((s) => s.move);
   const ascend = useRunStore((s) => s.ascend);
   const roomTypeAt = useRunStore((s) => s.roomTypeAt);
   const pos = useRunStore((s) => s.playerPos);
   const defeatOverlay = useRunStore((s) => s.defeatOverlay);
+  const endRun = useRunStore((s) => s.endRun);
   const openPanel = useUIStore((s) => s.open);
-
   const canAscend = useMemo(() => {
     if (!pos || typeof roomTypeAt !== "function") return false;
     return roomTypeAt(pos.x, pos.y) === "exit";
@@ -46,17 +47,14 @@ function ExplorePadInner() {
     }
   }, [ascend, canAscend]);
 
-  const handleOpenJournal = useCallback(() => {
+  const handleInspect = useCallback(() => {
     openPanel("journal");
   }, [openPanel]);
 
-  const handleOpenMap = useCallback(() => {
-    openPanel("map");
-  }, [openPanel]);
-
-  const handleOpenCharacter = useCallback(() => {
-    openPanel("character");
-  }, [openPanel]);
+  const handleFlee = useCallback(() => {
+    endRun?.();
+    router.push("/");
+  }, [endRun, router]);
 
   return (
     <div className="pad-surface" aria-disabled={defeatOverlay || undefined}>
@@ -67,12 +65,8 @@ function ExplorePadInner() {
         onMove={handleMove}
         onAscend={handleAscend}
         showAscend={canAscend}
-        onInteract={NOOP}
-        onBack={NOOP}
-        onOpenJournal={handleOpenJournal}
-        onOpenMap={handleOpenMap}
-        onOpenCharacter={handleOpenCharacter}
-        onLookAround={handleOpenMap}
+        onInspect={handleInspect}
+        onFlee={handleFlee}
       />
     </div>
   );
