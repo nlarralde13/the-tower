@@ -3,9 +3,9 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { useCombatStore } from "@/state/combatStore";
 import { useUIStore } from "@/store/uiStore";
+import { useRunStore } from "@/store/runStore";
 import type { CombatEntity, StatusInstance, TelemetryRecord } from "@/engine/combat/types";
 
-import TurnStrip from "../console/HUD/TurnStrip";
 import CompactLog from "../console/HUD/CompactLog";
 import Floaters from "../console/HUD/Floaters";
 import "./combat.css";
@@ -13,6 +13,8 @@ import "./combat.css";
 const EMPTY_ORDER: string[] = [];
 const EMPTY_ROWS: TelemetryRecord[] = [];
 const EMPTY_LINES: string[] = [];
+const PASSABLE_ROOM_TYPES = new Set(["entry","exit","boss","combat","trap","loot","out","special","empty"]);
+type ExitDirection = "north" | "south" | "east" | "west";
 
 interface CombatOverlayProps {
   active?: boolean;
@@ -35,15 +37,24 @@ export default function CombatOverlay({ active = false, leaving }: CombatOverlay
   const lastResolution = useCombatStore((state) => state.lastResolution);
 
   const setInputsDisabled = useUIStore((state) => state.setInputsDisabled);
+  const combatSession = useRunStore((s) => s.combatSession);
+  const completeCombat = useRunStore((s) => s.completeCombat);
+  const resolveCombatExit = useRunStore((s) => s.resolveCombatExit);
+  const grid = useRunStore((s) => s.grid);
+  const playerPos = useRunStore((s) => s.playerPos);
+  const activeCombat = useRunStore((s) => s.activeCombat);
 
   const [bannerText, setBannerText] = useState<string | null>(null);
   const [announcement, setAnnouncement] = useState<string>("");
+  const [lootCollected, setLootCollected] = useState(false);
+  const [roomSearched, setRoomSearched] = useState(false);
 
   const bannerTimerRef = useRef<number | null>(null);
   const initiativeKeyRef = useRef<string | null>(null);
   const statCeilingRef = useRef<Map<string, StatSnapshot>>(new Map());
   const overlayRef = useRef<HTMLDivElement | null>(null);
   const hudRef = useRef<HTMLDivElement | null>(null);
+  const completionGuardRef = useRef(false);
 
   const getCeiling = useCallback(
     (entity: CombatEntity): StatSnapshot => {
@@ -137,6 +148,23 @@ export default function CombatOverlay({ active = false, leaving }: CombatOverlay
   const entityMap = active && entities ? entities : {};
   const rows = active && telemetry ? telemetry : EMPTY_ROWS;
 
+  useEffect(() => {
+    if (!active || combatSession.status !== "ready" || !entities) {
+      completionGuardRef.current = false;
+      return;
+    }
+    const values = Object.values(entities);
+    const enemiesAlive = values.some((entity) => entity.faction === "enemy" && entity.alive);
+    const playersAlive = values.some((entity) => entity.faction === "player" && entity.alive);
+    if (!enemiesAlive && playersAlive && !completionGuardRef.current) {
+      completionGuardRef.current = true;
+      completeCombat({ victory: true });
+    } else if (!playersAlive && enemiesAlive && !completionGuardRef.current) {
+      completionGuardRef.current = true;
+      completeCombat({ victory: false });
+    }
+  }, [active, combatSession.status, completeCombat, entities]);
+
   const { allies, enemies } = useMemo(() => {
     if (!entities) {
       return { allies: [] as Array<{ entity: CombatEntity; ceiling: StatSnapshot }>, enemies: [] as Array<{ entity: CombatEntity; ceiling: StatSnapshot }> };
@@ -192,6 +220,57 @@ export default function CombatOverlay({ active = false, leaving }: CombatOverlay
   }, [rows]);
 
   const combatActive = active || Boolean(leaving);
+  const victoryPanelVisible =
+    combatSession.status === "resolving" && combatSession.outcome === "victory";
+
+  const exitAnchor = activeCombat
+    ? { x: activeCombat.x, y: activeCombat.y }
+    : playerPos
+    ? { x: playerPos.x, y: playerPos.y }
+    : null;
+
+  const exitOptions = useMemo(() => {
+    if (!grid || !exitAnchor) return [];
+    const { width: W, height: H, cells } = grid;
+    const probes: Array<{ dir: ExitDirection; x: number; y: number }> = [
+      { dir: "north", x: exitAnchor.x, y: exitAnchor.y - 1 },
+      { dir: "south", x: exitAnchor.x, y: exitAnchor.y + 1 },
+      { dir: "west", x: exitAnchor.x - 1, y: exitAnchor.y },
+      { dir: "east", x: exitAnchor.x + 1, y: exitAnchor.y },
+    ];
+    return probes.map((option) => {
+      const inBounds = option.x >= 0 && option.y >= 0 && option.x < W && option.y < H;
+      const cell = inBounds ? cells[option.y * W + option.x] : null;
+      const available = Boolean(inBounds && cell && PASSABLE_ROOM_TYPES.has(cell.type));
+      return { dir: option.dir, available };
+    });
+  }, [exitAnchor?.x, exitAnchor?.y, grid]);
+
+  useEffect(() => {
+    if (!victoryPanelVisible) {
+      setLootCollected(false);
+      setRoomSearched(false);
+    }
+  }, [victoryPanelVisible]);
+
+  const handleLootCorpses = useCallback(() => {
+    if (lootCollected) return;
+    setLootCollected(true);
+    setAnnouncement("You gather what valuables you can from the fallen.");
+  }, [lootCollected]);
+
+  const handleSearchRoom = useCallback(() => {
+    if (roomSearched) return;
+    setRoomSearched(true);
+    setAnnouncement("You search the chamber. (Search effects coming soon.)");
+  }, [roomSearched]);
+
+  const handleExitSelection = useCallback(
+    (dir: ExitDirection) => {
+      resolveCombatExit(dir);
+    },
+    [resolveCombatExit]
+  );
 
   const floaterTrigger = useMemo(() => {
     if (!rows.length) return undefined;
@@ -323,12 +402,28 @@ export default function CombatOverlay({ active = false, leaving }: CombatOverlay
         </div>
       ) : null}
 
+      {victoryPanelVisible ? (
+        <VictoryPanel
+          lootCollected={lootCollected}
+          roomSearched={roomSearched}
+          exitOptions={exitOptions}
+          onLoot={handleLootCorpses}
+          onSearch={handleSearchRoom}
+          onExit={handleExitSelection}
+        />
+      ) : null}
+
       <div className="combat-rail" data-active={combatActive ? "1" : undefined}>
         <div ref={hudRef} className="combat-hud">
           <div className="hud-card hud-left" id="hud-left">
             {allies.length ? (
               allies.map(({ entity, ceiling }) => (
-                <HudEntityRow key={entity.id} entity={entity} ceiling={ceiling} />
+                <HudEntityRow
+                  key={entity.id}
+                  entity={entity}
+                  ceiling={ceiling}
+                  isActive={entity.id === activeId}
+                />
               ))
             ) : (
               <p className="hud-empty" aria-live="polite">No allies present.</p>
@@ -337,7 +432,12 @@ export default function CombatOverlay({ active = false, leaving }: CombatOverlay
           <div className="hud-card hud-right" id="hud-right">
             {enemies.length ? (
               enemies.map(({ entity, ceiling }) => (
-                <HudEntityRow key={entity.id} entity={entity} ceiling={ceiling} />
+                <HudEntityRow
+                  key={entity.id}
+                  entity={entity}
+                  ceiling={ceiling}
+                  isActive={entity.id === activeId}
+                />
               ))
             ) : (
               <p className="hud-empty" aria-live="polite">No enemies detected.</p>
@@ -348,7 +448,6 @@ export default function CombatOverlay({ active = false, leaving }: CombatOverlay
 
       <div className="combat-root">
         <div className="combat-scene-overlay" id="scene-overlay">
-          <TurnStrip order={order} activeId={activeId} labelFor={labelFor} />
           <CompactLog lines={compactLines} />
           <Floaters trigger={floaterTrigger} />
         </div>
@@ -359,13 +458,24 @@ export default function CombatOverlay({ active = false, leaving }: CombatOverlay
 
 type MeterVariant = "hp" | "mp" | "st";
 
-function HudEntityRow({ entity, ceiling }: { entity: CombatEntity; ceiling: StatSnapshot }) {
+function HudEntityRow({
+  entity,
+  ceiling,
+  isActive,
+}: {
+  entity: CombatEntity;
+  ceiling: StatSnapshot;
+  isActive?: boolean;
+}) {
   const focusCurrent = entity.resources?.focus;
   const staminaCurrent = entity.resources?.stamina;
   const statusList = normalizeStatuses(entity.statuses);
 
   return (
-    <div className={`entity-row${entity.alive ? "" : " entity-row--down"}`}>
+    <div
+      className={`entity-row${entity.alive ? "" : " entity-row--down"}`}
+      data-active={isActive ? "true" : undefined}
+    >
       <div className="entity-name">
         {entity.name}
         {!entity.alive ? <span className="entity-tag" aria-label="Knocked out">KO</span> : null}
@@ -439,4 +549,71 @@ function normalizeStatuses(statuses: StatusInstance[] | undefined) {
 function formatStatus(statusId: string) {
   const cleaned = statusId.replace(/[_:-]+/g, " ").trim();
   return cleaned.replace(/\b\w/g, (m) => m.toUpperCase());
+}
+
+type VictoryExitOption = { dir: ExitDirection; available: boolean };
+
+function VictoryPanel({
+  lootCollected,
+  roomSearched,
+  exitOptions,
+  onLoot,
+  onSearch,
+  onExit,
+}: {
+  lootCollected: boolean;
+  roomSearched: boolean;
+  exitOptions: VictoryExitOption[];
+  onLoot: () => void;
+  onSearch: () => void;
+  onExit: (dir: ExitDirection) => void;
+}) {
+  return (
+    <div className="victory-panel" role="dialog" aria-live="polite">
+      <div>
+        <div className="victory-panel__title">Room secured</div>
+        <p className="victory-panel__subtitle">Collect spoils or move to your next target.</p>
+      </div>
+
+      <div className="victory-panel__primary">
+        <button
+          className={`btn ${lootCollected ? "btn--ghost" : "btn--primary"}`}
+          type="button"
+          onClick={onLoot}
+          disabled={lootCollected}
+        >
+          {lootCollected ? "Loot collected" : "Loot the corpses"}
+        </button>
+        <button
+          className="btn btn--ghost"
+          type="button"
+          onClick={onSearch}
+          disabled={roomSearched}
+        >
+          {roomSearched ? "Room searched" : "Search the room"}
+        </button>
+      </div>
+
+      <div>
+        <div className="victory-panel__subtitle">Travel to another room</div>
+        {exitOptions.length ? (
+          <div className="victory-panel__exits">
+            {exitOptions.map((option) => (
+              <button
+                key={option.dir}
+                className="btn btn--ghost victory-panel__exit-btn"
+                type="button"
+                disabled={!option.available}
+                onClick={() => onExit(option.dir)}
+              >
+                {option.dir.toUpperCase()}
+              </button>
+            ))}
+          </div>
+        ) : (
+          <p className="victory-panel__empty">No exits available here.</p>
+        )}
+      </div>
+    </div>
+  );
 }

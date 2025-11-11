@@ -321,7 +321,7 @@ export default function PlayPage() {
 
   function handleBack() {
     if (confirm("Leave the current run and return to the climb?")) {
-      router.push("/climb");
+      router.push("/");
     }
   }
 

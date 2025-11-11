@@ -1,0 +1,131 @@
+/* ==========================================================================
+   /play — Desktop layout (min-width: 1024px)
+   ========================================================================== */
+
+@media (min-width: 1024px) {
+  .play-root {
+    --play-root-pad-top: calc(var(--topbar-height) + 18px);
+    --play-root-pad-bottom: 48px;
+    --play-middle-max-h: calc(100dvh - var(--play-root-pad-top) - var(--play-root-pad-bottom));
+    min-height: 100dvh;
+    display: grid;
+    grid-template-columns: 320px minmax(720px, 1fr) 380px;
+    align-items: start;
+    gap: 16px;
+    padding: var(--play-root-pad-top) 24px var(--play-root-pad-bottom);
+  }
+
+  .play-middle {
+    max-height: var(--play-middle-max-h);
+    height: var(--play-middle-max-h);
+    position: relative;
+  }
+
+  .play-middle > .console-frame {
+    height: 100%;
+    max-height: 100%;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+  }
+
+  /* Left rail (e.g., character/stats) */
+  .play-left {
+    display: block;
+    position: sticky;
+    top: calc(var(--topbar-height) + 18px);
+    align-self: start;
+  }
+
+  /* Right rail (e.g., map/journal) */
+  .play-right {
+    display: block;
+    position: sticky;
+    top: calc(var(--topbar-height) + 18px);
+    align-self: start;
+  }
+
+  /* Center console expands */
+  .console-frame {
+    position: relative;
+    border-radius: var(--r-lg);
+  }
+
+  .console-frame__header { padding: 16px 16px 10px; }
+
+  .console-frame__content {
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    gap: clamp(16px, 1.6vw, 24px);
+    min-height: 0;
+    flex: 1 1 auto;
+    height: 100%;
+    padding: 16px;
+  }
+
+  .scene-surface {
+    min-height: 0;
+    flex: 1 1 auto;
+    display: flex;
+    border-radius: var(--r-md);
+    overflow: hidden;
+    max-height: clamp(220px, calc(var(--play-middle-max-h) - 160px), 560px);
+  }
+
+  /* The action pad becomes part of the flow on desktop (no overlay) */
+  .actions-pad {
+    position: static;
+    margin-top: 12px;
+    padding: 12px;
+  }
+
+  .actions-grid {
+    display: grid;
+    grid-template-columns: repeat(6, 1fr);
+    grid-auto-rows: 46px;
+    gap: 10px;
+  }
+
+  .actions-grid--dpad {
+    display: grid;
+    grid-template-columns: 1fr 140px 1fr;
+    grid-template-rows: 50px 50px 50px;
+    gap: 10px;
+    justify-items: center;
+  }
+  .actions-grid--dpad .north { grid-column: 2; grid-row: 1; }
+  .actions-grid--dpad .west  { grid-column: 1; grid-row: 2; justify-self: end; }
+  .actions-grid--dpad .east  { grid-column: 3; grid-row: 2; justify-self: start; }
+  .actions-grid--dpad .south { grid-column: 2; grid-row: 3; }
+
+  .actions-pad .btn { min-height: 46px; font-weight: 600; }
+
+  /* Panels used in rails (reuse global .menu-panel look) */
+  .rail-panel {
+    margin-bottom: 16px;
+  }
+}
+/* Overlay variant: floats above the SceneViewer */
+.actions-pad.actions-pad--overlay {
+  position: absolute;
+  left: 50%;
+  transform: translateX(-50%);
+  bottom: calc(env(safe-area-inset-bottom, 0px) + 14px);
+  z-index: 20; /* below your modal overlays at 30, above viewer */
+
+  /* Frosted glass look */
+  background: rgba(18, 14, 28, 0.55);
+  backdrop-filter: blur(14px) saturate(120%);
+  -webkit-backdrop-filter: blur(14px) saturate(120%);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: var(--r-sm);
+  box-shadow: var(--control-pad-shadow, 0 10px 28px rgba(5,0,20,.45)), inset 0 0 0 1px rgba(255,255,255,.05);
+  padding: 12px;
+  pointer-events: auto;
+}
+
+/* Slightly tighter on small screens */
+@media (max-width: 640px) {
+  .actions-pad.actions-pad--overlay { padding: 10px 12px; border-radius: 14px; }
+}

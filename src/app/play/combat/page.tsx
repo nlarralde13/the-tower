@@ -95,10 +95,12 @@ export default function PlayCombatPage() {
 
   return (
     <PageSurface>
-      <div className="play-root play-root--combat" data-combat-root>
-        {defeatOverlay ? <DefeatOverlay onEndRun={handleEndRun} /> : null}
+      <div className="play-root" data-combat-root>
+        <aside className="play-left" aria-label="Hero overview" />
 
         <section className="play-middle combat-stage" data-combat-host>
+          {defeatOverlay ? <DefeatOverlay onEndRun={handleEndRun} /> : null}
+
           <div className="console-frame console-frame--combat combat-stage__frame">
             <div className="console-frame__content">
               <div className="scene-surface scene-surface--locked">
@@ -125,6 +127,8 @@ export default function PlayCombatPage() {
           {/* HUD/turn strip/floaters */}
           <CombatOverlay active={mode === "combat"} leaving={combatSession.status === "resolving"} />
         </section>
+
+        <aside className="play-right" aria-label="Run intel" />
       </div>
     </PageSurface>
   );

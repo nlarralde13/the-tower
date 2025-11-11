@@ -43,6 +43,52 @@ body[data-combat="1"] .scene-viewer__caption--bottom { display: none !important;
   opacity: 0;
 }
 
+.victory-panel {
+  width: min(920px, 100%);
+  margin-inline: auto;
+  margin-bottom: 12px;
+  padding: 18px 20px;
+  border-radius: var(--r-lg);
+  border: 1px solid rgba(34, 197, 94, 0.35);
+  background: linear-gradient(135deg, rgba(6, 42, 22, 0.9), rgba(7, 24, 14, 0.85));
+  box-shadow: 0 24px 40px rgba(0, 0, 0, 0.45);
+  display: grid;
+  gap: 14px;
+}
+.victory-panel__title {
+  font-size: 18px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+.victory-panel__subtitle {
+  font-size: 13px;
+  opacity: 0.8;
+  margin: 4px 0 0;
+}
+.victory-panel__primary {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+.victory-panel__primary .btn {
+  flex: 1 1 200px;
+}
+.victory-panel__exits {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(110px, 1fr));
+  gap: 10px;
+  margin-top: 8px;
+}
+.victory-panel__exit-btn[disabled] {
+  opacity: 0.55;
+}
+.victory-panel__empty {
+  margin: 6px 0 0;
+  font-size: 13px;
+  opacity: 0.75;
+}
+
 /* Root overlay container (CombatOverlay wraps everything in here) */
 .combat-root {
   position: relative;
@@ -249,8 +295,16 @@ body[data-combat="1"] .scene-viewer__caption--bottom { display: none !important;
   grid-template-columns: auto 1fr auto;
   gap: 8px;
   align-items: center;
+  border: 1px solid transparent;
+  border-radius: var(--r-xs);
+  padding: 6px 8px;
+  transition: border-color var(--t-quick) var(--easing), box-shadow var(--t-quick) var(--easing);
 }
 .entity-row--down { opacity: 0.72; }
+.entity-row[data-active="true"] {
+  border-color: rgba(34, 197, 94, 0.6);
+  box-shadow: 0 0 12px rgba(34, 197, 94, 0.3);
+}
 .entity-tag {
   margin-left: 6px;
   padding: 2px 8px;
@@ -333,7 +387,7 @@ body[data-combat="1"] .scene-viewer__caption--bottom { display: none !important;
   text-shadow: 0 0 4px rgba(0,0,0,0.45);
 }
 
-/* Middle: scene overlays (turn order strip + compact log + floaters) */
+/* Middle: scene overlays (compact log + floaters) */
 .combat-scene-overlay {
   position: relative;
   flex: 1;
@@ -341,33 +395,6 @@ body[data-combat="1"] .scene-viewer__caption--bottom { display: none !important;
   max-width: 100%;
   margin-inline: auto;
   pointer-events: none;
-}
-
-/* Turn order strip sits along bottom edge of the scene viewer */
-.turn-strip {
-  position: absolute;
-  left: 8px; right: 8px; bottom: 8px;
-  display: grid; grid-auto-flow: column; gap: 6px;
-  justify-content: center;
-  padding: 6px 8px;
-  background: var(--glass-bg);
-  border: 1px solid var(--glass-border);
-  border-radius: var(--r-sm);
-  box-shadow: var(--glass-shadow);
-  backdrop-filter: blur(var(--blur-sm));
-  z-index: var(--z-play-floaters, 80);
-}
-.turn-chip {
-  padding: 4px 8px;
-  border-radius: var(--r-xs);
-  background: var(--glass-bg);
-  border: 1px solid var(--glass-border);
-  font-size: 12px;
-  opacity: .8;
-}
-.turn-chip[aria-current="true"] {
-  background: var(--glass-strong);
-  opacity: 1;
 }
 
 /* Compact log hugs the bottom-left of scene */

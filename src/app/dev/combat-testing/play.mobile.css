@@ -1,0 +1,169 @@
+/* ==========================================================================
+   Shared states (mobile + desktop)
+   ========================================================================== */
+
+.console-frame {
+  background: var(--glass-panel-bg);
+  border: 1px solid var(--stroke);
+  border-radius: var(--r-md);
+  box-shadow: var(--glass-panel-shadow), var(--glass-panel-inner);
+  overflow: hidden;
+}
+
+.play-root {
+  position: relative;
+  isolation: isolate;
+}
+
+.play-middle {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: clamp(12px, 2vw, 18px);
+  min-height: 0;
+  isolation: isolate;
+  --combat-rail-height: 0px;
+  --controlpad-h: 0px;
+}
+
+.play-middle > .combat-rail { order: 1; }
+.play-middle > .console-frame {
+  order: 2;
+  position: relative;
+  z-index: var(--z-play-scene, 10);
+  flex: 1 1 auto;
+  display: flex;
+}
+.play-middle > .console-frame .console-frame__content {
+  flex: 1 1 auto;
+}
+.play-middle > .combat-overlay { order: 3; }
+
+.console-frame--combat {
+  border-color: var(--accent-combat-border);
+  box-shadow: var(--glass-panel-shadow), var(--accent-combat-glow), var(--glass-panel-inner);
+}
+
+.scene-viewer--dimmed {
+  filter: saturate(0.72) brightness(0.85);
+  transition: filter var(--t-quick) var(--easing);
+}
+
+.actions-pad {
+  background: var(--control-pad-bg);
+  border: 1px solid var(--stroke);
+  border-radius: var(--r-sm);
+  box-shadow: var(--control-pad-shadow);
+}
+
+/* ==========================================================================
+   /play — Mobile layout (max-width: 1023px)
+   Handheld style: screen (top) + controller (bottom), no overlap
+   ========================================================================== */
+
+@media (max-width: 1023px) {
+  .play-root {
+    min-height: 100dvh;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+
+    /* leave room for TopBar + (optional) global bottom bar */
+    padding: calc(var(--topbar-height) + 12px) 12px
+             calc(16px + var(--controlpad-h) + var(--safe-bottom));
+  }
+  .play-middle {
+    --controlpad-h: clamp(180px, 36vh, 280px);
+  }
+
+  /* Rails are drawer-driven on mobile */
+  .play-left,
+  .play-right { display: none !important; }
+
+  /* Handheld console shell */
+  .console-frame {
+    position: relative;
+    flex: 1 1 auto;
+  }
+
+  /* Stack: screen on top, controller overlays bottom */
+  .console-frame__content {
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    padding: 16px;
+    min-height: calc(100dvh - var(--topbar-height) - 64px);
+    padding-bottom: calc(16px + var(--controlpad-h));
+  }
+
+  /* "Screen" area now stretches to fill remaining height */
+  .scene-surface {
+    position: relative;
+    flex: 1 1 auto;
+    min-height: 0;
+    width: 100%;
+    border-radius: var(--r-md);
+    overflow: hidden;
+    background: #04040a;
+  }
+
+  /* If you dim/lock in combat, keep the box height */
+  .scene-surface--locked { pointer-events: none; }
+
+  /* Controller pad overlays the lower portion of the scene */
+  .actions-pad {
+    position: absolute;
+    left: 50%;
+    transform: translateX(-50%);
+    width: min(480px, calc(100% - 32px));
+    bottom: 16px;
+    margin: 0;
+    padding: 14px;
+    z-index: 3;
+    backdrop-filter: blur(12px);
+    background: rgba(12, 8, 18, 0.8);
+  }
+
+  /* D-pad style grid; your ThumbBar already uses these hooks */
+  .actions-grid {
+    display: grid;
+    grid-template-columns: 1.1fr 1fr 1.1fr;  /* d-pad | center | buttons */
+    grid-auto-rows: 46px;
+    gap: 10px;
+    align-items: center;
+  }
+
+  /* Classic D-pad cross on the left */
+  .actions-grid--dpad {
+    display: grid;
+    grid-template-columns: 1fr 84px 1fr;
+    grid-template-rows: 46px 46px 46px;
+    gap: 8px;
+    justify-items: center;
+  }
+  .actions-grid--dpad .north { grid-column: 2; grid-row: 1; }
+  .actions-grid--dpad .west  { grid-column: 1; grid-row: 2; justify-self: end; }
+  .actions-grid--dpad .east  { grid-column: 3; grid-row: 2; justify-self: start; }
+  .actions-grid--dpad .south { grid-column: 2; grid-row: 3; }
+
+  /* Buttons feel chunky on touch */
+  .actions-pad .btn {
+    min-height: 46px;
+    font-weight: 700;
+    border-radius: 14px;
+  }
+
+  /* Optional: small “handheld seam” between screen & controls */
+  .console-frame__content::before {
+    content: "";
+    height: 2px;
+    border-radius: 2px;
+    background: linear-gradient(90deg,
+      rgba(197,139,58,0.28), rgba(255,255,255,0.12), rgba(197,139,58,0.28));
+    opacity: 0.35;
+    order: 0;
+    margin: -2px 4px 0 4px;
+  }
+}

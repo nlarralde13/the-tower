@@ -3,9 +3,11 @@
 // Renders just the combat control pad. Reads directly from the run store.
 // Avoids unstable selector identities and avoids creating new function refs.
 
-import { useMemo } from "react";
+import { useCallback, useMemo } from "react";
 import CombatConsole from "./CombatConsole";
 import { useRunStore } from "@/store/runStore";
+import { useCombatStore } from "@/state/combatStore";
+import type { ActionInstance, CombatEntity, TargetingMode } from "@/engine/combat/types";
 
 type EntityVM = {
   id: string;
@@ -25,15 +27,74 @@ const noopAct = (() => {}) as (a: unknown) => void;
 export default function CombatRoot() {
   // Read each field separately so React/Zustand can compare by identity.
   const mode = useRunStore((s) => s.mode);
-  const encounter = useRunStore((s) => s.activeCombat as any);
-  const onActSel = useRunStore((s: any) => s.onAct || s.playerAct || s.enqueuePlayerAction || s.queueAction || s.combatAct);
+  const onActSel = useRunStore(
+    (s: any) => s.onAct || s.playerAct || s.enqueuePlayerAction || s.queueAction || s.combatAct
+  );
   const lastResolution = useRunStore((s: any) => s.lastResolution);
 
-  // Stable function reference (do not create a new one every render)
-  const act = onActSel || noopAct;
+  const encounter = useCombatStore((s) => s.encounter);
+  const commitDecision = useCombatStore((s) => s.commitPlayerDecision);
 
   const inCombat = mode === "combat" && !!encounter;
   if (!inCombat) return null;
+
+  const playerEntity = useMemo<CombatEntity | null>(() => {
+    if (!encounter) return null;
+    return (
+      Object.values(encounter.entities).find((entity) => entity.faction === "player") ?? null
+    );
+  }, [encounter]);
+
+  const fallbackAct = useCallback(
+    (payload: { type: string; id?: string; targets?: string[] }) => {
+      if (!encounter || !playerEntity) return;
+      const actions = playerEntity.actions ?? [];
+      const findByCategory = (category: string) =>
+        actions.find((instance) => instance.contract.category === category)?.contract.id;
+      const findById = (id?: string) =>
+        id ? actions.find((instance) => instance.contract.id === id)?.contract.id : undefined;
+
+      let actionId: string | undefined;
+      switch (payload.type) {
+        case "Skill":
+        case "Item":
+          actionId = findById(payload.id);
+          break;
+        case "Defend":
+          actionId = findByCategory("defend") ?? findById(payload.id);
+          break;
+        case "Flee":
+          actionId = findByCategory("support") ?? findById(payload.id);
+          break;
+        case "Attack":
+        default:
+          actionId = findByCategory("attack") ?? findById(payload.id);
+          break;
+      }
+      if (!actionId) return;
+
+      let targets = payload.targets?.filter(Boolean) ?? [];
+      if (!targets.length) {
+        if (payload.type === "Defend") {
+          targets = [playerEntity.id];
+        } else {
+          const fallbackTarget =
+            encounter.order.find((id) => {
+              const entity = encounter.entities[id];
+              return entity?.faction === "enemy" && entity.alive;
+            }) ?? playerEntity.id;
+          targets = [fallbackTarget];
+        }
+      }
+      commitDecision({
+        actionId,
+        targetIds: targets,
+      });
+    },
+    [commitDecision, encounter, playerEntity]
+  );
+
+  const act = onActSel || fallbackAct || noopAct;
 
   const vm = useMemo(() => {
     const enc = encounter || {};
@@ -62,15 +123,10 @@ export default function CombatRoot() {
       };
     }
 
-    const party = Array.isArray(enc.party)
-      ? enc.party
-      : Object.keys(entities).filter((id) => entities[id].isPlayer);
-    const enemies = Array.isArray(enc.enemies)
-      ? enc.enemies
-      : Object.keys(entities).filter((id) => !entities[id].isPlayer);
+    const party = Object.keys(entities).filter((id) => entities[id].isPlayer);
+    const enemies = Object.keys(entities).filter((id) => !entities[id].isPlayer);
 
-    const order =
-      Array.isArray(enc.order) && enc.order.length ? enc.order : [...party, ...enemies];
+    const order = Array.isArray(enc.order) && enc.order.length ? enc.order : [...party, ...enemies];
 
     const turnOwnerId =
       Array.isArray(enc.order) && enc.order.length
@@ -87,13 +143,38 @@ export default function CombatRoot() {
     };
   }, [encounter]);
 
+  const skillOptions = useMemo(() => {
+    if (!playerEntity?.actions) return [];
+    return playerEntity.actions
+      .filter(
+        (action: ActionInstance) =>
+          action.source !== "item" && action.contract.category !== "attack"
+      )
+      .map((action) => ({
+        id: action.contract.id,
+        name: action.contract.name,
+        tag: targetingToTag(action.contract.targeting),
+      }));
+  }, [playerEntity]);
+
+  const itemOptions = useMemo(() => {
+    if (!playerEntity?.actions) return [];
+    return playerEntity.actions
+      .filter((action: ActionInstance) => action.source === "item")
+      .map((action) => ({
+        id: action.contract.id,
+        name: action.contract.name,
+        tag: targetingToTag(action.contract.targeting),
+      }));
+  }, [playerEntity]);
+
   return (
     <div className="control-pad" data-mode="combat">
       <div className="control-pad__surface">
         <CombatConsole
           vm={vm}
-          skills={[]}
-          items={[]}
+          skills={skillOptions}
+          items={itemOptions}
           onAct={(action) => act(action)}
           lastResolution={
             lastResolution
@@ -116,4 +197,19 @@ export default function CombatRoot() {
       </div>
     </div>
   );
+}
+
+function targetingToTag(targeting?: TargetingMode): "single" | "multi" | "cleave" | "self" {
+  const type = targeting?.type;
+  switch (type) {
+    case "self":
+      return "self";
+    case "row":
+      return "cleave";
+    case "allEnemies":
+    case "allAllies":
+      return "multi";
+    default:
+      return "single";
+  }
 }
